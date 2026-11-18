@@ -8503,7 +8503,6 @@ let firebaseUrl = (typeof SAVED_FIREBASE_URL !== 'undefined' && SAVED_FIREBASE_U
 let statCorrect = 0, statWrong = 0;
 let currentQuizItem = null, currentChoices = [], stageShowPassed = false, lastAnswerWrong = false;
 let currentEdId = null;
-let isVolunteerMode = false;
 
 function initDatabase() {
   const saved = localStorage.getItem('anat_items_v1');
@@ -8534,38 +8533,24 @@ function initDatabase() {
 
   populateCategorySelects();
   renderEditorList();
-  switchTab('quiz'); // Всегда открываем сайт на вкладке «Тренажер»
-  }
+  switchTab('quiz');
 
-  isVolunteerMode = window.location.search.includes('db=') || window.location.search.includes('edit=1');
-  applyRoleUI();
-}
-
-function toggleVolunteerMode() {
-  isVolunteerMode = !isVolunteerMode;
-  applyRoleUI();
-  if (!isVolunteerMode) switchTab('quiz');
-}
-
-function applyRoleUI() {
+  const isVolunteer = window.location.search.includes('db=') || window.location.search.includes('edit=1');
   const tabBtns = document.querySelectorAll('.tab-btn');
   const cloudCards = document.querySelectorAll('#tab-cloud .card');
-  const toggleBtn = document.getElementById('modeToggleBtn');
 
-  if (!isVolunteerMode) {
+  if (!isVolunteer) {
     if (tabBtns[1]) tabBtns[1].style.display = 'none';
     if (tabBtns[2]) tabBtns[2].textContent = 'Скачать сайт';
     if (cloudCards[0]) cloudCards[0].style.display = 'none';
     if (cloudCards[2]) cloudCards[2].style.display = 'none';
     if (cloudCards[1]) cloudCards[1].querySelectorAll('.btn-sec').forEach(b => b.style.display = 'none');
-    if (toggleBtn) toggleBtn.textContent = '⚙️ Редактор';
   } else {
     if (tabBtns[1]) tabBtns[1].style.display = '';
     if (tabBtns[2]) tabBtns[2].textContent = 'Облако и Скачивание HTML';
     if (cloudCards[0]) cloudCards[0].style.display = '';
     if (cloudCards[2]) cloudCards[2].style.display = '';
     if (cloudCards[1]) cloudCards[1].querySelectorAll('.btn-sec').forEach(b => b.style.display = '');
-    if (toggleBtn) toggleBtn.textContent = '👁️ Режим студента';
   }
 }
 
@@ -8620,7 +8605,7 @@ function startNextQuestion() {
   if (!pool.length) {
     box.innerHTML = `<div style="text-align:center;padding:24px;color:var(--muted)">
       <h3>В этом разделе пока нет загруженных фотографий</h3>
-      <p style="margin:8px 0 14px">Вы можете уже сейчас тренировать латынь по всем ${items.length} структурам или загрузить первые фото в режиме редактора.</p>
+      <p style="margin:8px 0 14px">Вы можете уже сейчас тренировать латынь по всем ${items.length} структурам.</p>
       <button class="btn" onclick="document.getElementById('quizFilter').value='all_latin';startNextQuestion()">Тренировать латынь без фото</button>
     </div>`;
     return;
@@ -9218,14 +9203,11 @@ function downloadStandaloneHtml() {
     packed[it.cat].push([it.ru, it.lat, it.img]);
   }
 
-  // Клонируем страницу и очищаем временную верстку перед упаковкой в файл
   const clone = document.documentElement.cloneNode(true);
   const sList = clone.querySelector('#structList');
   if (sList) sList.innerHTML = '';
   const qCont = clone.querySelector('#quizContent');
   if (qCont) qCont.innerHTML = '';
-  const mBtn = clone.querySelector('#modeToggleBtn');
-  if (mBtn) mBtn.remove();
 
   ['quiz','editor','cloud'].forEach((t, i) => {
     const tabEl = clone.querySelector('#tab-' + t);
