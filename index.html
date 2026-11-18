@@ -9367,24 +9367,36 @@ function updateStatsUI() {
   updateMistakesOption();
 }
 
-// === 6. РЕДАКТОР ДЛЯ ДОБРОВОЛЬЦЕВ (С ПАМЯТЬЮ ЦВЕТА И ТОЛЩИНЫ + ПРЯМАЯ ЛИНИЯ) ===
+// === 6. РЕДАКТОР ДЛЯ ДОБРОВОЛЬЦЕВ (КРАСНАЯ ЛИНИЯ ПО УМОЛЧАНИЮ + ЗАЩИТА ОТ ПОТЕРИ ИЗМЕНЕНИЙ) ===
 const canvas = document.getElementById('edCanvas');
 const ctx = canvas.getContext('2d');
 let baseImage = null;
 let shapes = [];
 let currentTool = 'blackbox';
 let isDrawing = false, startX = 0, startY = 0, currentPath = [];
+let edImageChanged = false;
+let savedShapesLength = 0;
+let pendingEdId = null;
+
+// Отдельный красный цвет по умолчанию для прямой линии (#ef4444)
+DEFAULT_TOOL_SETTINGS.lineColor = '#ef4444';
+DEFAULT_TOOL_SETTINGS.lineWidth = 4;
+toolSettings = Object.assign({}, DEFAULT_TOOL_SETTINGS, JSON.parse(localStorage.getItem('anat_tool_settings_v2') || '{}'));
 
 function isBlackoutTool(t) {
   return t === 'blackbox' || t === 'blackpen';
 }
 
 function getActiveToolColor() {
-  return isBlackoutTool(currentTool) ? toolSettings.blackoutColor : toolSettings.pointerColor;
+  if (isBlackoutTool(currentTool)) return toolSettings.blackoutColor;
+  if (currentTool === 'line') return toolSettings.lineColor;
+  return toolSettings.pointerColor;
 }
 
 function getActiveToolWidth() {
-  return isBlackoutTool(currentTool) ? toolSettings.blackoutWidth : toolSettings.pointerWidth;
+  if (isBlackoutTool(currentTool)) return toolSettings.blackoutWidth;
+  if (currentTool === 'line') return toolSettings.lineWidth;
+  return toolSettings.pointerWidth;
 }
 
 function syncStylePanelUI() {
@@ -9408,11 +9420,14 @@ function onToolStyleChange() {
   if (isBlackoutTool(currentTool)) {
     toolSettings.blackoutColor = col;
     toolSettings.blackoutWidth = wid;
+  } else if (currentTool === 'line') {
+    toolSettings.lineColor = col;
+    toolSettings.lineWidth = wid;
   } else {
     toolSettings.pointerColor = col;
     toolSettings.pointerWidth = wid;
   }
-  localStorage.setItem('anat_tool_settings_v1', JSON.stringify(toolSettings));
+  localStorage.setItem('anat_tool_settings_v2', JSON.stringify(toolSettings));
   syncStylePanelUI();
 }
 
@@ -9426,7 +9441,7 @@ function pickSwatch(hex) {
 
 function resetToolSettingsToDefault() {
   toolSettings = Object.assign({}, DEFAULT_TOOL_SETTINGS);
-  localStorage.setItem('anat_tool_settings_v1', JSON.stringify(toolSettings));
+  localStorage.setItem('anat_tool_settings_v2', JSON.stringify(toolSettings));
   syncStylePanelUI();
 }
 
@@ -9437,6 +9452,60 @@ function setTool(t) {
     if (el) el.classList.toggle('active', id === t);
   });
   syncStylePanelUI();
+}
+
+// Проверка наличия несохраненных изменений (новая картинка, рисунки на холсте или измененная латынь)
+function hasUnsavedChanges() {
+  if (!currentEdId) return false;
+  const it = items.find(i => i.id === currentEdId);
+  if (!it) return false;
+  const latInp = document.getElementById('edItemLat');
+  const latChanged = latInp && latInp.value.trim() !== (it.lat || '');
+  return edImageChanged || (shapes.length !== savedShapesLength) || latChanged;
+}
+
+function showUnsavedModal(nextId) {
+  pendingEdId = nextId;
+  let modal = document.getElementById('unsavedModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'unsavedModal';
+    modal.className = 'modal';
+    modal.style.zIndex = '150';
+    modal.innerHTML = `
+      <div class="card" style="max-width:460px;width:100%;text-align:center;padding:24px" onclick="event.stopPropagation()">
+        <h3 style="margin-bottom:8px">Несохраненные изменения</h3>
+        <p id="unsavedModalText" style="font-size:0.92rem;color:var(--muted);margin-bottom:18px"></p>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn btn-success" onclick="resolveUnsavedModal('save')">💾 Сохранить изменения</button>
+          <button class="btn btn-danger" onclick="resolveUnsavedModal('discard')">🗑️ Отменить изменения</button>
+          <button class="btn btn-sec" onclick="resolveUnsavedModal('stay')">✋ Остаться</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+  const curItem = items.find(i => i.id === currentEdId);
+  const txt = document.getElementById('unsavedModalText');
+  if (txt) {
+    txt.textContent = `Вы изменили карточку «${curItem ? curItem.ru : ''}», но не нажали кнопку сохранения. Что сделать перед переходом?`;
+  }
+  modal.classList.remove('hidden');
+}
+
+async function resolveUnsavedModal(action) {
+  const modal = document.getElementById('unsavedModal');
+  if (modal) modal.classList.add('hidden');
+  const targetId = pendingEdId;
+  pendingEdId = null;
+
+  if (action === 'stay' || !targetId) {
+    return;
+  }
+  if (action === 'save') {
+    await saveCurrentCard();
+  }
+  forceSelectItemForEdit(targetId);
 }
 
 function renderEditorList() {
@@ -9466,10 +9535,19 @@ function renderEditorList() {
     </div>
   `).join('');
 
-  if (!currentEdId && filtered.length) selectItemForEdit(filtered[0].id);
+  if (!currentEdId && filtered.length) forceSelectItemForEdit(filtered[0].id);
 }
 
 function selectItemForEdit(id) {
+  if (id === currentEdId) return;
+  if (hasUnsavedChanges()) {
+    showUnsavedModal(id);
+    return;
+  }
+  forceSelectItemForEdit(id);
+}
+
+function forceSelectItemForEdit(id) {
   currentEdId = id;
   const it = items.find(i => i.id === id);
   if (!it) return;
@@ -9477,8 +9555,10 @@ function selectItemForEdit(id) {
   document.getElementById('edItemRu').textContent = it.ru;
   document.getElementById('edItemLat').value = it.lat;
   shapes = [];
+  savedShapesLength = 0;
+  edImageChanged = false;
   if (it.img) {
-    loadImageToCanvas(it.img);
+    loadImageToCanvas(it.img, true);
   } else {
     baseImage = null;
     redrawCanvas();
@@ -9486,7 +9566,7 @@ function selectItemForEdit(id) {
   renderEditorList();
 }
 
-function loadImageToCanvas(src) {
+function loadImageToCanvas(src, isInitial = false) {
   const img = new Image();
   img.onload = () => {
     const maxW = 800, maxH = 600;
@@ -9496,6 +9576,8 @@ function loadImageToCanvas(src) {
     canvas.height = Math.round(h * ratio);
     baseImage = img;
     shapes = [];
+    savedShapesLength = 0;
+    edImageChanged = !isInitial;
     redrawCanvas();
   };
   img.src = src;
@@ -9517,7 +9599,7 @@ function redrawCanvas() {
 
 function drawShape(s) {
   ctx.save();
-  const col = s.color || (isBlackoutTool(s.type) ? '#000000' : '#00e5ff');
+  const col = s.color || (isBlackoutTool(s.type) ? '#000000' : (s.type === 'line' ? '#ef4444' : '#00e5ff'));
   const wid = s.width || (isBlackoutTool(s.type) ? 18 : 4);
 
   if (s.type === 'blackbox') {
@@ -9624,7 +9706,7 @@ function handleImageUpload(e) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = ev => loadImageToCanvas(ev.target.result);
+  reader.onload = ev => loadImageToCanvas(ev.target.result, false);
   reader.readAsDataURL(file);
 }
 
@@ -9634,7 +9716,7 @@ window.addEventListener('paste', e => {
     if (item.type.indexOf('image') === 0) {
       const blob = item.getAsFile();
       const reader = new FileReader();
-      reader.onload = ev => loadImageToCanvas(ev.target.result);
+      reader.onload = ev => loadImageToCanvas(ev.target.result, false);
       reader.readAsDataURL(blob);
     }
   }
@@ -9659,7 +9741,7 @@ async function handlePptxUpload(e) {
       const img = document.createElement('img');
       img.src = dataUrl;
       img.className = 'media-thumb';
-      img.onclick = () => loadImageToCanvas(dataUrl);
+      img.onclick = () => loadImageToCanvas(dataUrl, false);
       strip.appendChild(img);
     }
     if (!mediaFiles.length) strip.innerHTML = '<span>В презентации не найдено картинок.</span>';
@@ -9691,7 +9773,7 @@ async function renderPdfPageToCanvas() {
   tempCanvas.width = viewport.width;
   tempCanvas.height = viewport.height;
   await page.render({ canvasContext: tempCanvas.getContext('2d'), viewport }).promise;
-  loadImageToCanvas(tempCanvas.toDataURL('image/jpeg', 0.85));
+  loadImageToCanvas(tempCanvas.toDataURL('image/jpeg', 0.85), false);
 }
 
 function changePdfPage(delta) {
@@ -9704,7 +9786,6 @@ function changePdfPage(delta) {
 }
 function takeCurrentPdfPage() { renderPdfPageToCanvas(); }
 
-// Сохранение БЕЗ назойливого окна alert()
 async function saveCurrentCard() {
   const it = items.find(i => i.id === currentEdId);
   if (!it) return;
@@ -9712,10 +9793,11 @@ async function saveCurrentCard() {
   if (baseImage) {
     it.img = canvas.toDataURL('image/jpeg', 0.75);
   }
+  edImageChanged = false;
+  savedShapesLength = shapes.length;
   saveLocal();
   renderEditorList();
 
-  // Мягкая индикация на самой кнопке без всплывающего окна
   const saveBtn = document.querySelector('button[onclick="saveCurrentCard()"]');
   if (saveBtn) {
     const oldText = saveBtn.innerHTML;
@@ -9734,6 +9816,8 @@ async function deleteCurrentPhoto() {
   it.img = null;
   baseImage = null;
   shapes = [];
+  savedShapesLength = 0;
+  edImageChanged = false;
   redrawCanvas();
   saveLocal();
   renderEditorList();
