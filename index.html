@@ -8499,17 +8499,19 @@ const INITIAL_COMPACT_DB = {"Остеология":[["Тело позвонка"
 // === 2. ИНИЦИАЛИЗАЦИЯ БАЗЫ И СОСТОЯНИЯ ===
 let items = [];
 let mistakes = new Set(JSON.parse(localStorage.getItem('anat_mistakes') || '[]'));
-let firebaseUrl = localStorage.getItem('anat_fb_url') || 'let firebaseUrl = localStorage.getItem('anat_fb_url') || '[https://anatomy---show-and-name-default-rtdb.europe-west1.firebasedatabase.app/](https://anatomy---show-and-name-default-rtdb.europe-west1.firebasedatabase.app/)';';
+let firebaseUrl = (typeof SAVED_FIREBASE_URL !== 'undefined' && SAVED_FIREBASE_URL) || localStorage.getItem('anat_fb_url') || '';
 let statCorrect = 0, statWrong = 0;
 let currentQuizItem = null, currentChoices = [], stageShowPassed = false, lastAnswerWrong = false;
 let currentEdId = null;
+let isVolunteerMode = false;
 
 function initDatabase() {
   const saved = localStorage.getItem('anat_items_v1');
   if (saved) {
     try { items = JSON.parse(saved); } catch(e) { items = []; }
   }
-  if (!items.length) {
+  if (!items.length || items.length < 500) {
+    items = [];
     let idx = 1;
     for (const [cat, list] of Object.entries(INITIAL_COMPACT_DB)) {
       for (const pair of list) {
@@ -8518,37 +8520,63 @@ function initDatabase() {
     }
     saveLocal();
   }
-  // Проверка параметра ?db= в ссылке для добровольцев
+
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('db')) {
     firebaseUrl = urlParams.get('db').replace(/\/+$/, '');
     localStorage.setItem('anat_fb_url', firebaseUrl);
   }
   if (firebaseUrl) {
-    document.getElementById('firebaseUrlInput').value = firebaseUrl;
+    const inp = document.getElementById('firebaseUrlInput');
+    if (inp) inp.value = firebaseUrl;
     syncFromFirebase();
   }
 
-populateCategorySelects();
-  startNextQuestion();
+  populateCategorySelects();
   renderEditorList();
-  switchTab('quiz'); // Принудительно открывает вкладку «Тренажер» при входе на сайт
+  switchTab('quiz'); // Всегда открываем сайт на вкладке «Тренажер»
 
-  const isVolunteer = window.location.search.includes('db=') || window.location.search.includes('edit=1');
-  if (!isVolunteer) {
-    const tabBtns = document.querySelectorAll('.tab-btn');
-    tabBtns[1].style.display = 'none'; // Прячем «Редактор для добровольцев»
-    tabBtns[2].textContent = 'Скачать сайт'; // Переименовываем 3-ю вкладку
+  // Добавляем кнопку быстрого переключения режима Редактора/Студента в шапку
+  const nav = document.querySelector('.nav-container .logo');
+  if (nav && !document.getElementById('modeToggleBtn')) {
+    const btn = document.createElement('button');
+    btn.id = 'modeToggleBtn';
+    btn.className = 'badge';
+    btn.style.cursor = 'pointer';
+    btn.style.border = '1px solid #cbd5e1';
+    btn.onclick = toggleVolunteerMode;
+    nav.appendChild(btn);
+  }
 
-    // Прячем блоки с настройкой облака и массовым добавлением текста
-    const cloudCards = document.querySelectorAll('#tab-cloud .card');
+  isVolunteerMode = window.location.search.includes('db=') || window.location.search.includes('edit=1');
+  applyRoleUI();
+}
+
+function toggleVolunteerMode() {
+  isVolunteerMode = !isVolunteerMode;
+  applyRoleUI();
+  if (!isVolunteerMode) switchTab('quiz');
+}
+
+function applyRoleUI() {
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  const cloudCards = document.querySelectorAll('#tab-cloud .card');
+  const toggleBtn = document.getElementById('modeToggleBtn');
+
+  if (!isVolunteerMode) {
+    if (tabBtns[1]) tabBtns[1].style.display = 'none';
+    if (tabBtns[2]) tabBtns[2].textContent = 'Скачать сайт';
     if (cloudCards[0]) cloudCards[0].style.display = 'none';
     if (cloudCards[2]) cloudCards[2].style.display = 'none';
-
-    // Прячем серые кнопки JSON, оставляя только зеленую кнопку скачивания HTML
-    if (cloudCards[1]) {
-      cloudCards[1].querySelectorAll('.btn-sec').forEach(btn => btn.style.display = 'none');
-    }
+    if (cloudCards[1]) cloudCards[1].querySelectorAll('.btn-sec').forEach(b => b.style.display = 'none');
+    if (toggleBtn) toggleBtn.textContent = '⚙️ Редактор';
+  } else {
+    if (tabBtns[1]) tabBtns[1].style.display = '';
+    if (tabBtns[2]) tabBtns[2].textContent = 'Облако и Скачивание HTML';
+    if (cloudCards[0]) cloudCards[0].style.display = '';
+    if (cloudCards[2]) cloudCards[2].style.display = '';
+    if (cloudCards[1]) cloudCards[1].querySelectorAll('.btn-sec').forEach(b => b.style.display = '');
+    if (toggleBtn) toggleBtn.textContent = '👁️ Режим студента';
   }
 }
 
@@ -8575,8 +8603,10 @@ function updateMistakesOption() {
 
 function switchTab(tab) {
   ['quiz','editor','cloud'].forEach((t, i) => {
-    document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
-    document.querySelectorAll('.tab-btn')[i].classList.toggle('active', t === tab);
+    const el = document.getElementById('tab-' + t);
+    if (el) el.classList.toggle('hidden', t !== tab);
+    const btn = document.querySelectorAll('.tab-btn')[i];
+    if (btn) btn.classList.toggle('active', t === tab);
   });
   if (tab === 'quiz') startNextQuestion();
   if (tab === 'editor') renderEditorList();
@@ -8600,8 +8630,8 @@ function startNextQuestion() {
   const box = document.getElementById('quizContent');
   if (!pool.length) {
     box.innerHTML = `<div style="text-align:center;padding:24px;color:var(--muted)">
-      <h3>В этом режиме пока нет карточек с фото</h3>
-      <p style="margin:8px 0 14px">Переключите «Режим карточек» на <b>«Только латынь (все структуры, даже без фото)»</b> или загрузите первые фотографии во вкладке <b>«Редактор для добровольцев»</b>.</p>
+      <h3>В этом разделе пока нет загруженных фотографий</h3>
+      <p style="margin:8px 0 14px">Вы можете уже сейчас тренировать латынь по всем ${items.length} структурам или загрузить первые фото в режиме редактора.</p>
       <button class="btn" onclick="document.getElementById('quizFilter').value='all_latin';startNextQuestion()">Тренировать латынь без фото</button>
     </div>`;
     return;
@@ -8611,7 +8641,6 @@ function startNextQuestion() {
   stageShowPassed = (filter === 'all_latin' || !currentQuizItem.img);
   lastAnswerWrong = false;
 
-  // Подбор 2 неправильных картинок из ЭТОГО ЖЕ раздела
   if (!stageShowPassed && filter !== 'reverse') {
     let distractors = items.filter(i => i.img && i.id !== currentQuizItem.id && i.cat === currentQuizItem.cat);
     if (distractors.length < 2) {
@@ -8696,7 +8725,7 @@ function zoomImage(id, e) {
   document.getElementById('zoomModal').classList.remove('hidden');
 }
 
-// === 4. ЭТАП 2 («НАЗОВИ» — ПРОВЕРКА ЛАТЫНИ И КНОПКА «МОЙ ОТВЕТ БЫЛ ВЕРНЫМ») ===
+// === 4. ЭТАП 2 («НАЗОВИ» — ПРОВЕРКА ЛАТЫНИ) ===
 function normalizeLatin(str) {
   return (str || '').toLowerCase()
     .replace(/\(.*?\)/g, '')
@@ -8764,7 +8793,7 @@ function checkLatinInput() {
   const targetNorm = normalizeLatin(currentQuizItem.lat);
   const fb = document.getElementById('latinFeedback');
 
-  if (userNorm && (userNorm === targetNorm || targetNorm.includes(userNorm) && userNorm.length >= 5)) {
+  if (userNorm && (userNorm === targetNorm || (targetNorm.includes(userNorm) && userNorm.length >= 5))) {
     recordResult(true);
     fb.innerHTML = `<div class="feedback ok">✅ Верно! <b>${currentQuizItem.lat}</b> (${currentQuizItem.ru})</div>
       <div style="margin-top:10px"><button class="btn" onclick="startNextQuestion()">Следующий вопрос ➔</button></div>`;
@@ -8797,7 +8826,8 @@ function checkLatinMC(id) {
     fb.innerHTML = `<div style="margin-top:10px"><button class="btn" onclick="startNextQuestion()">Следующий вопрос ➔</button></div>`;
   } else {
     btn.classList.add('wrong');
-    document.getElementById('mc-' + currentQuizItem.id).classList.add('correct');
+    const rightBtn = document.getElementById('mc-' + currentQuizItem.id);
+    if (rightBtn) rightBtn.classList.add('correct');
     recordResult(false);
     fb.innerHTML = `<div style="margin-top:10px"><button class="btn" onclick="startNextQuestion()">Следующий вопрос ➔</button></div>`;
   }
@@ -8832,7 +8862,7 @@ function updateStatsUI() {
   updateMistakesOption();
 }
 
-// === 5. РЕДАКТОР ДЛЯ ДОБРОВОЛЬЦЕВ (CANVAS + PPTX + PDF) ===
+// === 5. РЕДАКТОР ДЛЯ ДОБРОВОЛЬЦЕВ ===
 const canvas = document.getElementById('edCanvas');
 const ctx = canvas.getContext('2d');
 let baseImage = null;
@@ -9012,7 +9042,6 @@ window.addEventListener('pointerup', e => {
 function undoCanvas() { shapes.pop(); redrawCanvas(); }
 function clearAnnotations() { shapes = []; redrawCanvas(); }
 
-// Загрузка обычной картинки и Ctrl+V
 function handleImageUpload(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -9033,7 +9062,6 @@ window.addEventListener('paste', e => {
   }
 });
 
-// Распаковка картинок из презентации .PPTX
 async function handlePptxUpload(e) {
   const file = e.target.files[0];
   if (!file) return;
@@ -9062,7 +9090,6 @@ async function handlePptxUpload(e) {
   }
 }
 
-// Загрузка и листание .PDF
 let currentPdfDoc = null, currentPdfPage = 1;
 async function handlePdfUpload(e) {
   const file = e.target.files[0];
@@ -9099,7 +9126,6 @@ function changePdfPage(delta) {
 }
 function takeCurrentPdfPage() { renderPdfPageToCanvas(); }
 
-// Сохранение карточки (сжатие в JPEG ~50-70 КБ + отправка в облако)
 async function saveCurrentCard() {
   const it = items.find(i => i.id === currentEdId);
   if (!it) return;
@@ -9127,7 +9153,7 @@ async function deleteCurrentPhoto() {
   if (firebaseUrl) await pushItemToFirebase(it);
 }
 
-// === 6. ОБЛАЧНАЯ СИНХРОНИЗАЦИЯ (FIREBASE REALTIME DATABASE REST API) ===
+// === 6. ОБЛАЧНАЯ СИНХРОНИЗАЦИЯ (FIREBASE) ===
 async function connectFirebase() {
   const val = document.getElementById('firebaseUrlInput').value.trim().replace(/\/+$/, '');
   if (!val.startsWith('https://')) {
@@ -9149,7 +9175,8 @@ async function syncFromFirebase() {
     const cloudData = await res.json();
     if (cloudData) {
       for (const [id, data] of Object.entries(cloudData)) {
-        const existing = items.find(i => i.id === id);
+        if (!data) continue;
+        const existing = items.find(i => i.id === id || (i.ru === data.ru && i.cat === data.cat));
         if (existing) {
           if (data.img !== undefined) existing.img = data.img;
           if (data.lat) existing.lat = data.lat;
@@ -9160,14 +9187,15 @@ async function syncFromFirebase() {
       saveLocal();
       populateCategorySelects();
       renderEditorList();
+      startNextQuestion();
     }
     badge.textContent = '☁️ Облако подключено';
     badge.style.background = '#dcfce7';
     badge.style.color = '#166534';
-    if (msg) msg.textContent = '✅ Облако успешно синхронизировано! Все изменения сохраняются в общую базу.';
+    if (msg) msg.textContent = '✅ Облако синхронизировано! При скачивании HTML ссылка на облако автоматически встроится в файл.';
   } catch (e) {
     badge.textContent = 'Ошибка облака';
-    if (msg) msg.textContent = '❌ Не удалось подключиться. Проверьте, что база создана в режиме Test Mode.';
+    if (msg) msg.textContent = '❌ Не удалось подключиться. Проверьте ссылку и режим Test Mode в Firebase.';
   }
 }
 
@@ -9190,24 +9218,47 @@ function copyVolunteerLink() {
   const url = new URL(window.location.href);
   url.searchParams.set('db', firebaseUrl);
   navigator.clipboard.writeText(url.toString());
-  alert('Ссылка для добровольцев скопирована в буфер обмена! Отправьте её в вашу беседу.');
+  alert('Ссылка для добровольцев скопирована в буфер обмена!');
 }
 
-// === 7. СКАЧИВАНИЕ ВСЕГО САЙТА В 1 АВТОНОМНЫЙ HTML-ФАЙЛ ===
+// === 7. ЧИСТОЕ СКАЧИВАНИЕ ВСЕГО САЙТА В 1 АВТОНОМНЫЙ HTML-ФАЙЛ ===
 function downloadStandaloneHtml() {
   const packed = {};
   for (const it of items) {
     if (!packed[it.cat]) packed[it.cat] = [];
     packed[it.cat].push([it.ru, it.lat, it.img]);
   }
-  let htmlSource = document.documentElement.outerHTML;
-  const replacement = `/*__DB_START__*/\nconst INITIAL_COMPACT_DB = ${JSON.stringify(packed)};\n/*__DB_END__*/`;
-  htmlSource = '<!DOCTYPE html>\n' + htmlSource.replace(/\/\*__DB_START__\*\/[\s\S]*?\/\*__DB_END__\*\//, replacement);
+
+  // Клонируем страницу и очищаем временную верстку перед упаковкой в файл
+  const clone = document.documentElement.cloneNode(true);
+  const sList = clone.querySelector('#structList');
+  if (sList) sList.innerHTML = '';
+  const qCont = clone.querySelector('#quizContent');
+  if (qCont) qCont.innerHTML = '';
+  const mBtn = clone.querySelector('#modeToggleBtn');
+  if (mBtn) mBtn.remove();
+
+  ['quiz','editor','cloud'].forEach((t, i) => {
+    const tabEl = clone.querySelector('#tab-' + t);
+    if (tabEl) tabEl.classList.toggle('hidden', t !== 'quiz');
+    const btns = clone.querySelectorAll('.tab-btn');
+    if (btns[i]) {
+      btns[i].classList.toggle('active', t === 'quiz');
+      btns[i].style.display = '';
+    }
+  });
+
+  let htmlSource = clone.outerHTML;
+  const sTag = '/*' + '__DB_START__' + '*/';
+  const eTag = '/*' + '__DB_END__' + '*/';
+  const replacement = `${sTag}\nconst SAVED_FIREBASE_URL = ${JSON.stringify(firebaseUrl || '')};\nconst INITIAL_COMPACT_DB = ${JSON.stringify(packed)};\n${eTag}`;
+  const regex = new RegExp('\\/\\*__DB_START__\\*\\/[\\s\\S]*?\\/\\*__DB_END__\\*\\/');
+  htmlSource = '<!DOCTYPE html>\n' + htmlSource.replace(regex, replacement);
 
   const blob = new Blob([htmlSource], { type: 'text/html;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'anatomy_trainer_full.html';
+  a.download = 'index.html';
   a.click();
 }
 
@@ -9269,6 +9320,5 @@ function importBulkText() {
 
 window.addEventListener('DOMContentLoaded', initDatabase);
 </script>
-
-
-</body></html>
+</body>
+</html>
