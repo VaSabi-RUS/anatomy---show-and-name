@@ -8535,17 +8535,6 @@ function initDatabase() {
   populateCategorySelects();
   renderEditorList();
   switchTab('quiz'); // Всегда открываем сайт на вкладке «Тренажер»
-
-  // Добавляем кнопку быстрого переключения режима Редактора/Студента в шапку
-  const nav = document.querySelector('.nav-container .logo');
-  if (nav && !document.getElementById('modeToggleBtn')) {
-    const btn = document.createElement('button');
-    btn.id = 'modeToggleBtn';
-    btn.className = 'badge';
-    btn.style.cursor = 'pointer';
-    btn.style.border = '1px solid #cbd5e1';
-    btn.onclick = toggleVolunteerMode;
-    nav.appendChild(btn);
   }
 
   isVolunteerMode = window.location.search.includes('db=') || window.location.search.includes('edit=1');
