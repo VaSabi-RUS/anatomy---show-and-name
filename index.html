@@ -8529,15 +8529,27 @@ function initDatabase() {
     syncFromFirebase();
   }
 
-const isVolunteer = window.location.search.includes('db=') || window.location.search.includes('edit=1');
-  if (!isVolunteer) {
-    document.querySelectorAll('.tab-btn')[1].style.display = 'none';
-    document.querySelectorAll('.tab-btn')[2].style.display = 'none';
-  }
-
-  populateCategorySelects();
+populateCategorySelects();
   startNextQuestion();
   renderEditorList();
+  switchTab('quiz'); // Принудительно открывает вкладку «Тренажер» при входе на сайт
+
+  const isVolunteer = window.location.search.includes('db=') || window.location.search.includes('edit=1');
+  if (!isVolunteer) {
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    tabBtns[1].style.display = 'none'; // Прячем «Редактор для добровольцев»
+    tabBtns[2].textContent = 'Скачать сайт'; // Переименовываем 3-ю вкладку
+
+    // Прячем блоки с настройкой облака и массовым добавлением текста
+    const cloudCards = document.querySelectorAll('#tab-cloud .card');
+    if (cloudCards[0]) cloudCards[0].style.display = 'none';
+    if (cloudCards[2]) cloudCards[2].style.display = 'none';
+
+    // Прячем серые кнопки JSON, оставляя только зеленую кнопку скачивания HTML
+    if (cloudCards[1]) {
+      cloudCards[1].querySelectorAll('.btn-sec').forEach(btn => btn.style.display = 'none');
+    }
+  }
 }
 
 function saveLocal() {
