@@ -8499,7 +8499,7 @@ const INITIAL_COMPACT_DB = {"Остеология":[["Тело позвонка"
 // === 2. ИНИЦИАЛИЗАЦИЯ БАЗЫ И СОСТОЯНИЯ ===
 let items = [];
 let mistakes = new Set(JSON.parse(localStorage.getItem('anat_mistakes') || '[]'));
-let firebaseUrl = localStorage.getItem('anat_fb_url') || '';
+let firebaseUrl = localStorage.getItem('anat_fb_url') || 'let firebaseUrl = localStorage.getItem('anat_fb_url') || '[https://anatomy---show-and-name-default-rtdb.europe-west1.firebasedatabase.app/](https://anatomy---show-and-name-default-rtdb.europe-west1.firebasedatabase.app/)';';
 let statCorrect = 0, statWrong = 0;
 let currentQuizItem = null, currentChoices = [], stageShowPassed = false, lastAnswerWrong = false;
 let currentEdId = null;
