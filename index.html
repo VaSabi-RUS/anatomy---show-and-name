@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Назови и покажи — Тренажер по анатомии</title>
+<!-- Библиотеки для распаковки PPTX (JSZip) и чтения PDF (PDF.js) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --success: #16a34a;
+    --danger: #dc2626;
+    --warning: #d97706;
+    --text: #1e293b;
+    --muted: #64748b;
+    --border: #e2e8f0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+  body { background: var(--bg); color: var(--text); line-height: 1.5; padding-bottom: 40px; }
+  header { background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 50; }
+  .nav-container { max-width: 1100px; margin: 0 auto; padding: 12px 16px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; }
+  .logo { font-weight: 800; font-size: 1.2rem; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+  .badge { font-size: 0.78rem; padding: 3px 8px; border-radius: 99px; background: #e0e7ff; color: var(--primary); font-weight: 600; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tab-btn { border: 1px solid var(--border); background: var(--bg); color: var(--text); padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: 0.15s; }
+  .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .container { max-width: 1100px; margin: 20px auto; padding: 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .col { flex: 1; min-width: 260px; }
+  select, input[type="text"], textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; background: #fff; }
+  button.btn { padding: 10px 16px; border-radius: 8px; border: none; font-weight: 600; font-size: 0.92rem; cursor: pointer; background: var(--primary); color: #fff; transition: 0.15s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  button.btn:hover { background: var(--primary-hover); }
+  button.btn-sec { background: #e2e8f0; color: var(--text); }
+  button.btn-sec:hover { background: #cbd5e1; }
+  button.btn-success { background: var(--success); }
+  button.btn-danger { background: var(--danger); }
+  button.btn-warning { background: var(--warning); }
+  .stats-bar { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.9rem; color: var(--muted); margin-bottom: 12px; }
+  .stats-bar b { color: var(--text); }
+  
+  /* Сетка выбора из 3 картинок */
+  .quiz-title { font-size: 1.4rem; font-weight: 800; text-align: center; margin: 12px 0 6px; color: var(--text); }
+  .quiz-subtitle { text-align: center; color: var(--muted); font-size: 0.92rem; margin-bottom: 16px; }
+  .img-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-bottom: 16px; }
+  .img-choice { border: 3px solid var(--border); border-radius: 12px; overflow: hidden; background: #0f172a; cursor: pointer; position: relative; aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; transition: 0.15s; }
+  .img-choice:hover { border-color: var(--primary); transform: translateY(-2px); }
+  .img-choice.correct { border-color: var(--success); box-shadow: 0 0 0 4px rgba(22,163,74,0.2); }
+  .img-choice.wrong { border-color: var(--danger); opacity: 0.65; }
+  .img-choice img { width: 100%; height: 100%; object-fit: contain; }
+  .zoom-btn { position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.65); color: #fff; border: none; border-radius: 6px; padding: 4px 8px; font-size: 0.78rem; cursor: pointer; }
+
+  /* Блок проверки латыни */
+  .latin-box { max-width: 650px; margin: 16px auto 0; padding: 16px; border-radius: 10px; background: #f8fafc; border: 1px solid var(--border); }
+  .mc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  @media (max-width: 600px) { .mc-grid { grid-template-columns: 1fr; } }
+  .mc-btn { padding: 12px; border: 2px solid var(--border); background: #fff; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: left; font-style: italic; }
+  .mc-btn:hover { border-color: var(--primary); }
+  .mc-btn.correct { background: #dcfce7; border-color: var(--success); color: #14532d; }
+  .mc-btn.wrong { background: #fee2e2; border-color: var(--danger); color: #7f1d1d; }
+  .feedback { margin-top: 12px; padding: 12px; border-radius: 8px; font-weight: 600; }
+  .feedback.ok { background: #dcfce7; color: #14532d; }
+  .feedback.err { background: #fee2e2; color: #7f1d1d; }
+
+  /* Редактор добровольца */
+  .editor-layout { display: grid; grid-template-columns: 330px 1fr; gap: 16px; }
+  @media (max-width: 850px) { .editor-layout { grid-template-columns: 1fr; } }
+  .struct-list { max-height: 540px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; margin-top: 10px; }
+  .struct-item { padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.9rem; }
+  .struct-item:hover { background: #f1f5f9; }
+  .struct-item.active { background: #e0e7ff; font-weight: 600; }
+  .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .dot-yes { background: var(--success); }
+  .dot-no { background: #cbd5e1; }
+  
+  .canvas-wrap { background: #0f172a; border-radius: 10px; overflow: hidden; display: flex; justify-content: center; align-items: center; min-height: 320px; position: relative; border: 2px dashed #475569; }
+  canvas { max-width: 100%; max-height: 520px; touch-action: none; cursor: crosshair; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .tool-btn { padding: 8px 12px; border-radius: 8px; border: 2px solid var(--border); background: #fff; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+  .tool-btn.active { border-color: var(--primary); background: #eff6ff; color: var(--primary); }
+  .media-strip { display: flex; gap: 8px; overflow-x: auto; padding: 8px 0; margin-top: 8px; }
+  .media-thumb { height: 80px; border: 2px solid var(--border); border-radius: 6px; cursor: pointer; flex-shrink: 0; }
+  .media-thumb:hover { border-color: var(--primary); }
+  .hidden { display: none !important; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal img { max-width: 95vw; max-height: 90vh; border-radius: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="nav-container">
+    <div class="logo">
+      <span>Назови и покажи</span>
+      <span id="cloudBadge" class="badge">Локальный режим</span>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('quiz')">Тренажер</button>
+      <button class="tab-btn" onclick="switchTab('editor')">Редактор для добровольцев</button>
+      <button class="tab-btn" onclick="switchTab('cloud')">Облако и Скачивание HTML</button>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <!-- ВКЛАДКА 1: ТРЕНАЖЕР -->
+  <div id="tab-quiz">
+    <div class="card">
+      <div class="row">
+        <div class="col">
+          <label style="font-size:0.82rem;font-weight:700;color:var(--muted)">РАЗДЕЛ АНАТОМИИ</label>
+          <select id="quizCategory" onchange="startNextQuestion()"></select>
+        </div>
+        <div class="col">
+          <label style="font-size:0.82rem;font-weight:700;color:var(--muted)">РЕЖИМ КАРТОЧЕК</label>
+          <select id="quizFilter" onchange="startNextQuestion()">
+            <option value="with_img">Назови и покажи (карточки с фото)</option>
+            <option value="all_latin">Только латынь (все структуры, даже без фото)</option>
+            <option value="mistakes">Работа над ошибками (сложные: 0)</option>
+            <option value="reverse">Обратный: 1 фото → вспомнить рус + лат</option>
+          </select>
+        </div>
+        <div class="col">
+          <label style="font-size:0.82rem;font-weight:700;color:var(--muted)">СПОСОБ ПРОВЕРКИ ЛАТЫНИ</label>
+          <select id="latinMode" onchange="renderLatinStep()">
+            <option value="input">Ввод с клавиатуры (с пониманием сокр.)</option>
+            <option value="mc">Выбор из 4 вариантов</option>
+            <option value="flash">Быстрая самопроверка (Показать ответ)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="quizArena">
+      <div class="stats-bar">
+        <span>Отвечено верно: <b id="statCorrect">0</b></span>
+        <span>Ошибок: <b id="statWrong">0</b></span>
+        <span>С фото в этом разделе: <b id="statWithPhoto">0</b></span>
+      </div>
+      <div id="quizContent"></div>
+    </div>
+  </div>
+
+  <!-- ВКЛАДКА 2: РЕДАКТОР ДЛЯ ДОБРОВОЛЬЦЕВ -->
+  <div id="tab-editor" class="hidden">
+    <div class="editor-layout">
+      <!-- Левая колонка: список структур -->
+      <div class="card">
+        <h3 style="margin-bottom:10px">Список структур (<span id="progressCount">0/0</span>)</h3>
+        <select id="edCategory" onchange="renderEditorList()" style="margin-bottom:8px"></select>
+        <div class="row" style="margin-bottom:8px">
+          <input type="text" id="edSearch" placeholder="Поиск по названию..." oninput="renderEditorList()">
+        </div>
+        <select id="edStatusFilter" onchange="renderEditorList()">
+          <option value="all">Все структуры</option>
+          <option value="missing">Только БЕЗ фото (свободные)</option>
+          <option value="done">Только С фото (готовые)</option>
+        </select>
+        <div class="struct-list" id="structList"></div>
+      </div>
+
+      <!-- Правая колонка: холст и загрузка фото / PPTX / PDF -->
+      <div class="card">
+        <div id="edCurrentHeader" style="margin-bottom:12px">
+          <div style="font-size:0.82rem;color:var(--muted)" id="edItemCat">Выберите структуру слева</div>
+          <h2 id="edItemRu" style="font-size:1.3rem">—</h2>
+          <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+            <span style="font-size:0.85rem;font-weight:600;color:var(--muted)">Латынь:</span>
+            <input type="text" id="edItemLat" placeholder="Латинское название" style="font-style:italic;max-width:360px">
+          </div>
+        </div>
+
+        <!-- Загрузка файлов и распаковка PPTX / PDF -->
+        <div class="card" style="background:#f8fafc;padding:12px;margin-bottom:12px">
+          <div class="row">
+            <label class="btn btn-sec" style="cursor:pointer">
+              📷 Загрузить фото / картинку
+              <input type="file" accept="image/*" style="display:none" onchange="handleImageUpload(event)">
+            </label>
+            <label class="btn btn-sec" style="cursor:pointer">
+              📊 Извлечь картинки из .PPTX
+              <input type="file" accept=".pptx" style="display:none" onchange="handlePptxUpload(event)">
+            </label>
+            <label class="btn btn-sec" style="cursor:pointer">
+              📄 Открыть страницы .PDF
+              <input type="file" accept=".pdf" style="display:none" onchange="handlePdfUpload(event)">
+            </label>
+            <span style="font-size:0.8rem;color:var(--muted)">Или нажмите <b>Ctrl+V</b>, чтобы вставить скриншот</span>
+          </div>
+
+          <!-- Полоса извлеченных картинок из PPTX или страниц PDF -->
+          <div id="extractedBox" class="hidden" style="margin-top:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span id="extractedTitle" style="font-size:0.82rem;font-weight:700;color:var(--primary)">Извлеченные кадры (кликните, чтобы взять в редактор):</span>
+              <div id="pdfPager" class="hidden" style="display:flex;gap:6px;align-items:center">
+                <button class="btn btn-sec" style="padding:4px 10px" onclick="changePdfPage(-1)">◀</button>
+                <span id="pdfPageInfo" style="font-size:0.82rem;font-weight:600">1 / 1</span>
+                <button class="btn btn-sec" style="padding:4px 10px" onclick="changePdfPage(1)">▶</button>
+                <button class="btn" style="padding:4px 10px" onclick="takeCurrentPdfPage()">Взять эту страницу</button>
+              </div>
+            </div>
+            <div class="media-strip" id="mediaStrip"></div>
+          </div>
+        </div>
+
+        <!-- Панель рисования -->
+        <div class="toolbar">
+          <button class="tool-btn active" id="tool-blackbox" onclick="setTool('blackbox')">⬛ Замазать подпись (плашка)</button>
+          <button class="tool-btn" id="tool-blackpen" onclick="setTool('blackpen')">🖊️ Черный маркер</button>
+          <button class="tool-btn" id="tool-circle" onclick="setTool('circle')">⭕ Красный кружок</button>
+          <button class="tool-btn" id="tool-arrow" onclick="setTool('arrow')">↗️ Красная стрелка</button>
+          <button class="tool-btn" onclick="undoCanvas()">↩️ Шаг назад</button>
+          <button class="tool-btn" onclick="clearAnnotations()">🗑️ Сбросить пометки</button>
+        </div>
+
+        <div class="canvas-wrap">
+          <canvas id="edCanvas" width="700" height="500"></canvas>
+        </div>
+
+        <div class="row" style="margin-top:14px;justify-content:space-between">
+          <button class="btn btn-success" onclick="saveCurrentCard()">💾 Сохранить карточку (в базу и облако)</button>
+          <button class="btn btn-danger" onclick="deleteCurrentPhoto()">Удалить фото у структуры</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ВКЛАДКА 3: ОБЛАКО, ИМПОРТ И СКАЧИВАНИЕ HTML -->
+  <div id="tab-cloud" class="hidden">
+    <div class="card">
+      <h3>☁️ Бесплатное облако для совместной работы добровольцев (Firebase)</h3>
+      <p style="font-size:0.9rem;color:var(--muted);margin:6px 0 12px">
+        Вставьте ссылку на вашу Firebase Realtime Database (вида <code>https://ваш-проект-default-rtdb.firebaseio.com</code>). Все фотографии, которые сохраняют добровольцы, будут мгновенно синхронизироваться у всей группы.
+      </p>
+      <div class="row">
+        <input type="text" id="firebaseUrlInput" placeholder="https://anatomy-default-rtdb.firebaseio.com" style="flex:1">
+        <button class="btn" onclick="connectFirebase()">Подключить и синхронизировать</button>
+        <button class="btn btn-sec" onclick="copyVolunteerLink()">🔗 Скопировать ссылку для добровольцев</button>
+      </div>
+      <div id="cloudStatusMsg" style="margin-top:8px;font-size:0.88rem;color:var(--success);font-weight:600"></div>
+    </div>
+
+    <div class="card">
+      <h3>📥 Автономный режим и резервные копии</h3>
+      <p style="font-size:0.9rem;color:var(--muted);margin:6px 0 14px">
+        Вы в любой момент можете скачать весь этот сайт вместе со всеми загруженными фотографиями в один-единственный файл <b>.html</b>. Он будет открываться на любом телефоне и компьютере вообще без интернета.
+      </p>
+      <div class="row">
+        <button class="btn btn-success" onclick="downloadStandaloneHtml()">⬇️ Скачать готовый сайт со всеми фото (.HTML)</button>
+        <button class="btn btn-sec" onclick="exportJsonBackup()">📦 Экспорт пакета базы (.JSON)</button>
+        <label class="btn btn-sec" style="cursor:pointer">
+          📂 Загрузить пакет от добровольца (.JSON)
+          <input type="file" accept=".json" style="display:none" onchange="importJsonBackup(event)">
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>➕ Массовое добавление или редактирование списка структур</h3>
+      <p style="font-size:0.88rem;color:var(--muted);margin:6px 0 10px">
+        Формат: каждая структура с новой строки в виде <code>Раздел | Русское название | Латинское название</code> (или просто <code>Русское название | Латинское название</code> — тогда добавится в выбранный раздел).
+      </p>
+      <textarea id="bulkInput" rows="5" placeholder="Остеология | Тело позвонка | Corpus vertebrae"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="importBulkText()">Добавить структуры в базу</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Модальное окно увеличения картинки -->
+<div id="zoomModal" class="modal hidden" onclick="this.classList.add('hidden')">
+  <img id="zoomImg" src="" alt="Увеличенный препарат">
+</div>
+
+<script>
+// === 1. СТАРТОВАЯ БАЗА СТРУКТУР ПО ВСЕМ 15 РАЗДЕЛАМ ДОКУМЕНТА ===
+// При скачивании автономного HTML эта переменная автоматически перезаписывается полной базой с картинками
+/*__DB_START__*/
+const INITIAL_COMPACT_DB = {
+  "Остеология": [
+    ["Тело позвонка","Corpus vertebrae"],["Дуга позвонка","Arcus vertebrae"],["Верхняя позвоночная вырезка","Incisura vertebralis superior"],["Нижняя позвоночная вырезка","Incisura vertebralis inferior"],["Позвоночное отверстие","Foramen vertebrale"],["Остистый отросток","Processus spinosus"],["Поперечный отросток","Processus transversus"],["Верхний суставной отросток","Processus articularis superior"],["Нижний суставной отросток","Processus articularis inferior"],["Передняя дуга 1 шейного позвонка","Arcus anterior atlantis"],["Ямка зуба 1 шейного позвонка","Fovea dentis"],["Задняя дуга 1 шейного позвонка","Arcus posterior atlantis"],["Зуб осевого позвонка","Dens axis"],["Сонный бугорок VI шейного позвонка","Tuberculum caroticum"],["Основание крестца","Basis ossis sacri"],["Ушковидная поверхность крестца","Facies auricularis"],["Верхушка крестца","Apex ossis sacri"],["Тазовые крестцовые отверстия","Foramina sacralia anteriora (pelvica)"],["Дорсальные крестцовые отверстия","Foramina sacralia posteriora (dorsalia)"],["Крестцовый канал","Canalis sacralis"],["Головка ребра","Caput costae"],["Шейка ребра","Collum costae"],["Бугорок ребра","Tuberculum costae"],["Борозда ребра","Sulcus costae"],["Бугорок передней лестничной мышцы (1 ребро)","Tuberculum musculi scaleni anterioris"],["Борозда подключичной артерии (1 ребро)","Sulcus arteriae subclaviae"],["Борозда подключичной вены (1 ребро)","Sulcus venae subclaviae"],["Рукоятка грудины","Manubrium sterni"],["Яремная вырезка грудины","Incisura jugularis"],["Тело грудины","Corpus sterni"],["Мечевидный отросток","Processus xiphoideus"],["Угол грудины","Angulus sterni"],["Лобный бугор лобной кости","Tuber frontale"],["Глабелла лобной кости","Glabella"],["Надглазничное отверстие (вырезка) лобной кости","Foramen supraorbitale (incisura supraorbitalis)"],["Турецкое седло","Sella turcica"],["Гипофизарная ямка","Fossa hypophysialis"],["Зрительный канал","Canalis opticus"],["Круглое отверстие","Foramen rotundum"],["Овальное отверстие","Foramen ovale"],["Остистое отверстие","Foramen spinosum"],["Большое затылочное отверстие","Foramen magnum"],["Пирамида (каменистая часть) височной кости","Pars petrosa (pyramis)"],["Сосцевидный отросток височной кости","Processus mastoideus"],["Сонный канал височной кости","Canalis caroticus"],["Акромион","Acromion"],["Клювовидный отросток лопатки","Processus coracoideus"],["Анатомическая шейка плечевой кости","Collum anatomicum humeri"],["Хирургическая шейка плечевой кости","Collum chirurgicum humeri"],["Вертлужная впадина тазовой кости","Acetabulum"],["Запирательное отверстие тазовой кости","Foramen obturatum"],["Головка бедренной кости","Caput femoris"],["Шейка бедренной кости","Collum femoris"],["Большой вертел бедренной кости","Trochanter major"],["Малый вертел бедренной кости","Trochanter minor"],["Надколенник","Patella"],["Пяточный бугор","Tuber calcanei"]
+  ],
+  "Артрология": [
+    ["Венечный шов (черепа)","Sutura coronalis"],["Сагиттальный шов (черепа)","Sutura sagittalis"],["Ламбдовидный шов (черепа)","Sutura lambdoidea"],["Межпозвоночный диск","Discus intervertebralis"],["Фиброзное кольцо (межпозвоночного диска)","Anulus fibrosus"],["Студенистое ядро (межпозвоночного диска)","Nucleus pulposus"],["Передняя продольная связка (позвоночника)","Ligamentum longitudinale anterius"],["Задняя продольная связка (позвоночника)","Ligamentum longitudinale posterius"],["Желтая связка (позвоночника)","Ligamentum flavum"],["Акромиально-ключичный сустав","Articulatio acromioclavicularis"],["Клювовидно-акромиальная связка","Ligamentum coracoacromiale"],["Суставная губа плечевого сустава","Labrum glenoidale"],["Лучезапястный сустав","Articulatio radiocarpalis"],["Канал запястья","Canalis carpi"],["Запирательная мембрана","Membrana obturatoria"],["Крестцово-бугорная связка","Ligamentum sacrotuberale"],["Крестцово-остистая связка","Ligamentum sacrospinale"],["Лобковый симфиз","Symphysis pubica"],["Связка головки бедренной кости","Ligamentum capitis femoris"],["Латеральный мениск коленного сустава","Meniscus lateralis"],["Медиальный мениск коленного сустава","Meniscus medialis"],["Передняя крестообразная связка колена","Ligamentum cruciatum anterius"],["Задняя крестообразная связка колена","Ligamentum cruciatum posterius"],["Поперечный сустав предплюсны (Шопаров сустав)","Articulatio tarsi transversa"],["Предплюсне-плюсневые суставы (Лисфранков сустав)","Articulationes tarsometatarsales"]
+  ],
+  "Миология": [
+    ["Трапециевидная мышца","Musculus trapezius"],["Широчайшая мышца спины","Musculus latissimus dorsi"],["Ромбовидная мышца","Musculus rhomboideus"],["Мышца, поднимающая лопатку","Musculus levator scapulae"],["Мышца, выпрямляющая позвоночник","Musculus erector spinae"],["Большая грудная мышца","Musculus pectoralis major"],["Малая грудная мышца","Musculus pectoralis minor"],["Передняя зубчатая мышца","Musculus serratus anterior"],["Поясничная часть диафрагмы","Pars lumbalis diaphragmatis"],["Аортальное отверстие диафрагмы","Hiatus aorticus"],["Пищеводное отверстие диафрагмы","Hiatus esophageus"],["Отверстие нижней полой вены","Foramen venae cavae"],["Прямая мышца живота","Musculus rectus abdominis"],["Паховая связка","Ligamentum inguinale"],["Наружная косая мышца живота","Musculus obliquus externus abdominis"],["Внутренняя косая мышца живота","Musculus obliquus internus abdominis"],["Поперечная мышца живота","Musculus transversus abdominis"],["Грудино-ключично-сосцевидная мышца","Musculus sternocleidomastoideus"],["Двубрюшная мышца","Musculus digastricus"],["Передняя лестничная мышца","Musculus scalenus anterior"],["Височная мышца","Musculus temporalis"],["Жевательная мышца","Musculus masseter"],["Дельтовидная мышца","Musculus deltoideus"],["Надостная мышца","Musculus supraspinatus"],["Подостная мышца","Musculus infraspinatus"],["Подлопаточная мышца","Musculus subscapularis"],["Длинная головка двуглавой мышцы плеча","Caput longum musculi bicipitis brachii"],["Клювовидно-плечевая мышца","Musculus coracobrachialis"],["Трехстороннее отверстие","Foramen trilaterum"],["Четырехстороннее отверстие","Foramen quadrilaterum"],["Подвздошно-поясничная мышца","Musculus iliopsoas"],["Большая ягодичная мышца","Musculus gluteus maximus"],["Грушевидная мышца","Musculus piriformis"],["Портняжная мышца","Musculus sartorius"],["Прямая мышца (четырехглавая мышца)","Musculus rectus femoris"],["Двуглавая мышца бедра","Musculus biceps femoris"],["Трехглавая мышца голени","Musculus triceps surae"],["Икроножная мышца","Musculus gastrocnemius"],["Камбаловидная мышца","Musculus soleus"]
+  ],
+  "Пищеварительная система": [
+    ["Подъязычная слюнная железа","Glandula sublingualis"],["Поднижнечелюстная слюнная железа","Glandula submandibularis"],["Околоушная слюнная железа","Glandula parotidea"],["Околоушный проток","Ductus parotideus"],["Коронка зуба","Corona dentis"],["Шейка зуба","Collum dentis"],["Корень зуба","Radix dentis"],["Тело языка","Corpus linguae"],["Корень языка","Radix linguae"],["Слепое отверстие языка","Foramen caecum linguae"],["Язычная миндалина","Tonsilla lingualis"],["Мягкое небо","Palatum molle"],["Глоточная миндалина","Tonsilla pharyngealis"],["Глоточное отверстие слуховой трубы","Ostium pharyngeum tubae auditivae"],["Большая кривизна желудка","Curvatura major"],["Малая кривизна желудка","Curvatura minor"],["Кардиальная часть желудка","Pars cardiaca"],["Дно желудка","Fundus gastricus"],["Тело желудка","Corpus gastricum"],["Привратниковый сфинктер","Musculus sphincter pylori"],["Большой сосочек двенадцатиперстной кишки","Papilla duodeni major"],["Тощая кишка","Jejunum"],["Подвздошная кишка","Ileum"],["Слепая кишка","Caecum"],["Червеобразный отросток","Appendix vermiformis"],["Восходящая ободочная кишка","Colon ascendens"],["Поперечная ободочная кишка","Colon transversum"],["Нисходящая ободочная кишка","Colon descendens"],["Сигмовидная ободочная кишка","Colon sigmoideum"],["Прямая кишка","Rectum"],["Ворота печени","Porta hepatis"],["Правая доля печени","Lobus hepatis dexter"],["Левая доля печени","Lobus hepatis sinister"],["Квадратная доля печени","Lobus quadratus"],["Хвостатая доля печени","Lobus caudatus"],["Круглая связка печени","Ligamentum teres hepatis"],["Общий печеночный проток","Ductus hepaticus communis"],["Пузырный проток","Ductus cysticus"],["Общий желчный проток","Ductus choledochus (biliaris)"],["Головка поджелудочной железы","Caput pancreatis"],["Тело поджелудочной железы","Corpus pancreatis"],["Хвост поджелудочной железы","Cauda pancreatis"],["Большой сальник","Omentum majus"],["Малый сальник","Omentum minus"]
+  ],
+  "Дыхательная система": [
+    ["Перегородка носа","Septum nasi"],["Верхняя носовая раковина","Concha nasalis superior"],["Средняя носовая раковина","Concha nasalis media"],["Нижняя носовая раковина","Concha nasalis inferior"],["Хоаны","Choanae"],["Щитовидный хрящ гортани","Cartilago thyroidea"],["Дуга перстневидного хряща","Arcus cartilaginis cricoideae"],["Пластинка перстневидного хряща","Lamina cartilaginis cricoideae"],["Черпаловидный хрящ","Cartilago arytenoidea"],["Надгортанник","Epiglottis"],["Голосовая складка (гортани)","Plica vocalis"],["Голосовая щель","Rima glottidis"],["Трахея","Trachea"],["Бифуркация трахеи","Bifurcatio tracheae"],["Правый главный бронх","Bronchus principalis dexter"],["Левый главный бронх","Bronchus principalis sinister"],["Основание легкого","Basis pulmonis"],["Верхушка легкого","Apex pulmonis"],["Сердечная вырезка левого легкого","Incisura cardiaca pulmonis sinistri"],["Ворота легкого","Hilum pulmonis"],["Корень легкого","Radix pulmonis"],["Косая щель легкого","Fissura obliqua"],["Горизонтальная щель правого легкого","Fissura horizontalis pulmonis dextri"],["Купол плевры","Cupula pleurae"],["Реберно-диафрагмальный синус","Recessus costodiaphragmaticus"]
+  ],
+  "Мочеполовой аппарат": [
+    ["Почка (правая и левая)","Ren (dexter et sinister)"],["Почечные ворота","Hilum renale"],["Почечная пазуха","Sinus renalis"],["Фиброзная капсула почки","Capsula fibrosa"],["Корковое вещество почки","Cortex renalis"],["Мозговое вещество почки","Medulla renalis"],["Почечная пирамида","Pyramis renalis"],["Почечный сосочек","Papilla renalis"],["Почечные столбы","Columnae renales"],["Почечная лоханка","Pelvis renalis"],["Большая почечная чашка","Calix renalis major"],["Малая почечная чашка","Calix renalis minor"],["Мочеточник (правый, левый)","Ureter (dexter, sinister)"],["Мочевой пузырь","Vesica urinaria"],["Дно мочевого пузыря","Fundus vesicae"],["Шейка мочевого пузыря","Cervix vesicae"],["Мочепузырный треугольник","Trigonum vesicae"],["Мочеточниковое отверстие","Ostium ureteris"],["Внутреннее отверстие мочеиспускательного канала","Ostium urethrae internum"]
+  ],
+  "Мужские половые органы": [
+    ["Яичко","Testis"],["Белочная оболочка яичка","Tunica albuginea"],["Придаток яичка","Epididymis"],["Головка придатка яичка","Caput epididymidis"],["Тело придатка яичка","Corpus epididymidis"],["Семявыносящий проток","Ductus deferens"],["Ампула семявыносящего протока","Ampulla ductus deferentis"],["Семенной пузырек","Vesicula seminalis (glandula vesiculosa)"],["Семенной бугорок","Colliculus seminalis"],["Семенной канатик","Funiculus spermaticus"],["Предстательная железа","Prostata"],["Головка полового члена","Glans penis"],["Крайняя плоть полового члена","Preputium penis"],["Пещеристое тело полового члена","Corpus cavernosum penis"],["Губчатое тело полового члена","Corpus spongiosum penis"],["Предстательная часть мужского мочеиспускательного канала","Pars prostatica urethrae"],["Перепончатая часть мужского мочеиспускательного канала","Pars membranacea urethrae"],["Губчатая часть мужского мочеиспускательного канала","Pars spongiosa urethrae"],["Мошонка","Scrotum"],["Сухожильный центр промежности","Centrum perinei"],["Диафрагма таза","Diaphragma pelvis"],["Наружный сфинктер заднего прохода","Musculus sphincter ani externus"]
+  ],
+  "Женские половые органы": [
+    ["Яичник","Ovarium"],["Свободный край яичника","Margo liber ovarii"],["Брыжеечный край яичника","Margo mesovaricus"],["Собственная связка яичника","Ligamentum ovarii proprium"],["Поддерживающая связка яичника","Ligamentum suspensorium ovarii"],["Маточная труба","Tuba uterina"],["Бахромки маточной трубы","Fimbriae tubae uterinae"],["Воронка маточной трубы","Infundibulum tubae uterinae"],["Ампула маточной трубы","Ampulla tubae uterinae"],["Перешеек маточной трубы","Isthmus tubae uterinae"],["Тело матки","Corpus uteri"],["Дно матки","Fundus uteri"],["Шейка матки","Cervix uteri"],["Широкая связка матки","Ligamentum latum uteri"],["Круглая связка матки","Ligamentum teres uteri"],["Задний свод влагалища","Fornix vaginae posterior"],["Большая половая губа","Labium majus pudendi"],["Малая половая губа","Labium minus pudendi"],["Преддверие влагалища","Vestibulum vaginae"],["Клитор","Clitoris"],["Наружное отверстие женского мочеиспускательного канала","Ostium urethrae externum"]
+  ],
+  "Ангиология": [
+    ["Основание сердца","Basis cordis"],["Верхушка сердца","Apex cordis"],["Правое предсердие","Atrium dextrum"],["Левое предсердие","Atrium sinistrum"],["Правое ушко сердца","Auricula dextra"],["Левое ушко сердца","Auricula sinistra"],["Венечная борозда сердца","Sulcus coronarius"],["Передняя межжелудочковая борозда","Sulcus interventricularis anterior"],["Правый желудочек сердца","Ventriculus dexter"],["Левый желудочек сердца","Ventriculus sinister"],["Клапан аорты","Valva aortae"],["Клапан легочного ствола","Valva trunci pulmonalis"],["Гребенчатые мышцы (предсердий)","Musculi pectinati"],["Овальная ямка (предсердия)","Fossa ovalis"],["Мясистые трабекулы","Trabeculae carneae"],["Сосочковые мышцы","Musculi papillares"],["Сухожильные хорды","Chordae tendineae"],["Перикард","Pericardium"],["Правая венечная артерия","Arteria coronaria dextra"],["Левая венечная артерия","Arteria coronaria sinistra"],["Венечный синус сердца","Sinus coronarius"],["Легочный ствол","Truncus pulmonalis"],["Восходящая часть аорты","Pars ascendens aortae"],["Дуга аорты","Arcus aortae"],["Плечеголовной ствол","Truncus brachiocephalicus"],["Общая сонная артерия","Arteria carotis communis"],["Наружная сонная артерия","Arteria carotis externa"],["Внутренняя сонная артерия","Arteria carotis interna"],["Подключичная артерия","Arteria subclavia"],["Позвоночная артерия","Arteria vertebralis"],["Базилярная артерия","Arteria basilaris"],["Артериальный (Виллизиев) круг большого мозга","Circulus arteriosus cerebri"],["Подмышечная артерия","Arteria axillaris"],["Плечевая артерия","Arteria brachialis"],["Лучевая артерия","Arteria radialis"],["Локтевая артерия","Arteria ulnaris"],["Грудная аорта","Pars thoracica aortae (Aorta thoracica)"],["Брюшная аорта","Pars abdominalis aortae (Aorta abdominalis)"],["Чревный ствол","Truncus coeliacus"],["Селезеночная артерия","Arteria splenica (lienalis)"],["Левая желудочная артерия","Arteria gastrica sinistra"],["Общая печеночная артерия","Arteria hepatica communis"],["Верхняя брыжеечная артерия","Arteria mesenterica superior"],["Нижняя брыжеечная артерия","Arteria mesenterica inferior"],["Почечная артерия","Arteria renalis"],["Общая подвздошная артерия","Arteria iliaca communis"],["Внутренняя подвздошная артерия","Arteria iliaca interna"],["Наружная подвздошная артерия","Arteria iliaca externa"],["Бедренная артерия","Arteria femoralis"],["Подколенная артерия","Arteria poplitea"],["Верхняя полая вена","Vena cava superior"],["Нижняя полая вена","Vena cava inferior"],["Непарная вена","Vena azygos"],["Внутренняя яремная вена","Vena jugularis interna"],["Воротная вена","Vena portae hepatis"],["Большая подкожная вена ноги","Vena saphena magna"]
+  ],
+  "Лимфатическая система": [
+    ["Грудной лимфатический проток","Ductus thoracicus"],["Подчелюстные лимфатические узлы","Nodi lymphoidei submandibulares"],["Бронхо-легочные лимфатические узлы","Nodi lymphoidei bronchopulmonales"],["Поясничные лимфатические узлы","Nodi lymphoidei lumbales"],["Левые желудочные лимфатические узлы","Nodi lymphoidei gastrici sinistri"],["Правые желудочные лимфатические узлы","Nodi lymphoidei gastrici dextri"],["Левые желудочно-сальниковые лимфатические узлы","Nodi lymphoidei gastroomentales sinistri"],["Правые желудочно-сальниковые лимфатические узлы","Nodi lymphoidei gastroomentales dextri"],["Верхние брыжеечные лимфатические узлы","Nodi lymphoidei mesenterici superiores"],["Подмышечные лимфатические узлы","Nodi lymphoidei axillares"],["Паховые лимфатические узлы","Nodi lymphoidei inguinales"]
+  ],
+  "Иммунная система": [
+    ["Тимус","Thymus"],["Небная миндалина","Tonsilla palatina"],["Глоточная миндалина","Tonsilla pharyngealis"],["Язычная миндалина","Tonsilla lingualis"],["Аппендикс","Appendix vermiformis"],["Селезенка","Splen (Lien)"],["Ворота селезенки","Hilum splenicum (lienale)"]
+  ],
+  "Эндокринные железы": [
+    ["Правая доля щитовидной железы","Lobus dexter glandulae thyroideae"],["Левая доля щитовидной железы","Lobus sinister glandulae thyroideae"],["Перешеек щитовидной железы","Isthmus glandulae thyroideae"],["Надпочечник (левый, правый)","Glandula suprarenalis (sinistra, dextra)"]
+  ],
+  "Центральная нервная система": [
+    ["Передняя срединная щель спинного мозга","Fissura mediana anterior"],["Задняя срединная щель спинного мозга","Sulcus medianus posterior"],["Передний рог спинного мозга (на разрезе)","Cornu anterius"],["Задний рог спинного мозга (на разрезе)","Cornu posterius"],["Серп большого мозга (твердая оболочка головного мозга)","Falx cerebri"],["Намет мозжечка","Tentorium cerebelli"],["Верхний сагиттальный синус","Sinus sagittalis superior"],["Поперечный синус","Sinus transversus"],["Сигмовидный синус","Sinus sigmoideus"],["Пещеристый синус","Sinus cavernosus"],["Пирамида продолговатого мозга","Pyramis medullae oblongatae"],["Олива продолговатого мозга","Oliva"],["Базилярная борозда (моста)","Sulcus basilaris"],["Средняя мозжечковая ножка","Pedunculus cerebellaris medius"],["IV желудочек (на сагиттальном разрезе)","Ventriculus quartus"],["Ромбовидная ямка","Fossa rhomboidea"],["Полушарие мозжечка","Hemispherium cerebelli"],["«Древо жизни» (на разрезе мозжечка)","Arbor vitae"],["Зубчатое ядро (на разрезе мозжечка)","Nucleus dentatus"],["Ножка мозга","Pedunculus cerebri"],["Водопровод среднего мозга","Aqueductus mesencephali (cerebri)"],["Красное ядро (на разрезе среднего мозга)","Nucleus ruber"],["Черное вещество (на разрезе среднего мозга)","Substantia nigra"],["Шишковидное тело","Corpus pineale"],["Таламус","Thalamus"],["Зрительный перекрест","Chiasma opticum"],["Сосцевидное тело","Corpus mamillare"],["III желудочек","Ventriculus tertius"],["Центральная борозда полушария большого мозга","Sulcus centralis"],["Латеральная борозда полушария большого мозга","Sulcus lateralis"],["Предцентральная извилина","Gyrus precentralis"],["Постцентральная извилина","Gyrus postcentralis"],["Островковая доля большого мозга (островок)","Insula (Lobus insularis)"],["Поясная извилина","Gyrus cinguli"],["Шпорная борозда","Sulcus calcarinus"],["Обонятельная луковица","Bulbus olfactorius"],["Обонятельный тракт","Tractus olfactorius"],["Мозолистое тело","Corpus callosum"],["Свод мозга","Fornix"],["Прозрачная перегородка (мозга)","Septum pellucidum"],["Головка хвостатого ядра","Caput nuclei caudati"],["Чечевицеобразное ядро","Nucleus lentiformis"],["Внутренняя капсула (конечный мозг)","Capsula interna"]
+  ],
+  "Периферическая нервная система": [
+    ["Зрительный нерв (II пара)","Nervus opticus"],["Глазодвигательный нерв (III пара)","Nervus oculomotorius"],["Блоковой нерв (IV пара)","Nervus trochlearis"],["Тройничный нерв (V пара)","Nervus trigeminus"],["Тройничный узел","Ganglion trigeminale"],["Глазной нерв","Nervus ophthalmicus"],["Верхнечелюстной нерв","Nervus maxillaris"],["Нижнечелюстной нерв","Nervus mandibularis"],["Ушно-височный нерв","Nervus auriculotemporalis"],["Язычный нерв","Nervus lingualis"],["Нижний альвеолярный нерв","Nervus alveolaris inferior"],["Отводящий нерв (VI пара)","Nervus abducens"],["Лицевой нерв (VII пара)","Nervus facialis"],["Языкоглоточный нерв (IX пара)","Nervus glossopharyngeus"],["Блуждающий нерв (X пара)","Nervus vagus"],["Верхний гортанный нерв","Nervus laryngeus superior"],["Возвратный гортанный нерв","Nervus laryngeus recurrens"],["Добавочный нерв (XI пара)","Nervus accessorius"],["Подъязычный нерв (XII пара)","Nervus hypoglossus"],["Диафрагмальный нерв","Nervus phrenicus"],["Мышечно-кожный нерв","Nervus musculocutaneus"],["Срединный нерв","Nervus medianus"],["Локтевой нерв","Nervus ulnaris"],["Лучевой нерв","Nervus radialis"],["Подмышечный нерв","Nervus axillaris"],["Бедренный нерв","Nervus femoralis"],["Запирательный нерв","Nervus obturatorius"],["Седалищный нерв","Nervus ischiadicus"],["Общий малоберцовый нерв","Nervus fibularis (peroneus) communis"],["Большеберцовый нерв","Nervus tibialis"],["Симпатический ствол","Truncus sympathicus"],["Чревные узлы (чревное сплетение)","Ganglia coeliaca (Plexus coeliacus)"]
+  ],
+  "Органы чувств": [
+    ["Склера глазного яблока","Sclera"],["Роговица","Cornea"],["Ресничное тело (на разрезе глазного яблока)","Corpus ciliare"],["Радужка (на разрезе глазного яблока)","Iris"],["Зрачок","Pupilla"],["Сетчатка (на разрезе глазного яблока)","Retina"],["Хрусталик (на разрезе глазного яблока)","Lens"],["Стекловидное тело (на разрезе глазного яблока)","Corpus vitreum"],["Латеральная прямая мышца глаза","Musculus rectus lateralis"],["Верхняя прямая мышца глаза","Musculus rectus superior"],["Верхнее веко","Palpebra superior"],["Нижнее веко","Palpebra inferior"],["Слезная железа","Glandula lacrimalis"],["Завиток ушной раковины","Helix"],["Противозавиток","Antihelix"],["Козелок","Tragus"],["Противокозелок","Antitragus"],["Мочка ушной раковины","Lobulus auriculae"]
+  ]
+};
+/*__DB_END__*/
+
+// === 2. ИНИЦИАЛИЗАЦИЯ БАЗЫ И СОСТОЯНИЯ ===
+let items = [];
+let mistakes = new Set(JSON.parse(localStorage.getItem('anat_mistakes') || '[]'));
+let firebaseUrl = localStorage.getItem('anat_fb_url') || '';
+let statCorrect = 0, statWrong = 0;
+let currentQuizItem = null, currentChoices = [], stageShowPassed = false, lastAnswerWrong = false;
+let currentEdId = null;
+
+function initDatabase() {
+  const saved = localStorage.getItem('anat_items_v1');
+  if (saved) {
+    try { items = JSON.parse(saved); } catch(e) { items = []; }
+  }
+  if (!items.length) {
+    let idx = 1;
+    for (const [cat, list] of Object.entries(INITIAL_COMPACT_DB)) {
+      for (const pair of list) {
+        items.push({ id: 's_' + (idx++), cat, ru: pair[0], lat: pair[1], img: pair[2] || null });
+      }
+    }
+    saveLocal();
+  }
+  // Проверка параметра ?db= в ссылке для добровольцев
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('db')) {
+    firebaseUrl = urlParams.get('db').replace(/\/+$/, '');
+    localStorage.setItem('anat_fb_url', firebaseUrl);
+  }
+  if (firebaseUrl) {
+    document.getElementById('firebaseUrlInput').value = firebaseUrl;
+    syncFromFirebase();
+  }
+  populateCategorySelects();
+  startNextQuestion();
+  renderEditorList();
+}
+
+function saveLocal() {
+  try { localStorage.setItem('anat_items_v1', JSON.stringify(items)); } catch(e) {}
+  updateMistakesOption();
+}
+
+function populateCategorySelects() {
+  const cats = [...new Set(items.map(i => i.cat))];
+  const qSel = document.getElementById('quizCategory');
+  const eSel = document.getElementById('edCategory');
+  qSel.innerHTML = `<option value="ALL">Все разделы (${items.length})</option>` +
+    cats.map(c => `<option value="${c}">${c} (${items.filter(i=>i.cat===c).length})</option>`).join('');
+  eSel.innerHTML = `<option value="ALL">Все разделы</option>` +
+    cats.map(c => `<option value="${c}">${c}</option>`).join('');
+  updateMistakesOption();
+}
+
+function updateMistakesOption() {
+  const opt = document.querySelector('#quizFilter option[value="mistakes"]');
+  if (opt) opt.textContent = `Работа над ошибками (сложные: ${mistakes.size})`;
+}
+
+function switchTab(tab) {
+  ['quiz','editor','cloud'].forEach((t, i) => {
+    document.getElementById('tab-' + t).classList.toggle('hidden', t !== tab);
+    document.querySelectorAll('.tab-btn')[i].classList.toggle('active', t === tab);
+  });
+  if (tab === 'quiz') startNextQuestion();
+  if (tab === 'editor') renderEditorList();
+}
+
+// === 3. ЛОГИКА ТРЕНАЖЕРА «НАЗОВИ И ПОКАЖИ» ===
+function startNextQuestion() {
+  const cat = document.getElementById('quizCategory').value;
+  const filter = document.getElementById('quizFilter').value;
+  let pool = items.filter(i => cat === 'ALL' || i.cat === cat);
+
+  const withPhotoCount = pool.filter(i => i.img).length;
+  document.getElementById('statWithPhoto').textContent = `${withPhotoCount} из ${pool.length}`;
+
+  if (filter === 'with_img' || filter === 'reverse') {
+    pool = pool.filter(i => i.img);
+  } else if (filter === 'mistakes') {
+    pool = pool.filter(i => mistakes.has(i.id));
+  }
+
+  const box = document.getElementById('quizContent');
+  if (!pool.length) {
+    box.innerHTML = `<div style="text-align:center;padding:24px;color:var(--muted)">
+      <h3>В этом режиме пока нет карточек с фото</h3>
+      <p style="margin:8px 0 14px">Переключите «Режим карточек» на <b>«Только латынь (все структуры, даже без фото)»</b> или загрузите первые фотографии во вкладке <b>«Редактор для добровольцев»</b>.</p>
+      <button class="btn" onclick="document.getElementById('quizFilter').value='all_latin';startNextQuestion()">Тренировать латынь без фото</button>
+    </div>`;
+    return;
+  }
+
+  currentQuizItem = pool[Math.floor(Math.random() * pool.length)];
+  stageShowPassed = (filter === 'all_latin' || !currentQuizItem.img);
+  lastAnswerWrong = false;
+
+  // Подбор 2 неправильных картинок из ЭТОГО ЖЕ раздела
+  if (!stageShowPassed && filter !== 'reverse') {
+    let distractors = items.filter(i => i.img && i.id !== currentQuizItem.id && i.cat === currentQuizItem.cat);
+    if (distractors.length < 2) {
+      distractors = items.filter(i => i.img && i.id !== currentQuizItem.id);
+    }
+    distractors.sort(() => Math.random() - 0.5);
+    currentChoices = [currentQuizItem, ...distractors.slice(0, 2)].sort(() => Math.random() - 0.5);
+  } else {
+    currentChoices = [currentQuizItem];
+  }
+
+  renderQuizArena();
+}
+
+function renderQuizArena() {
+  const filter = document.getElementById('quizFilter').value;
+  const box = document.getElementById('quizContent');
+
+  if (filter === 'reverse' && currentQuizItem.img) {
+    box.innerHTML = `
+      <div class="quiz-subtitle">Раздел: <b>${currentQuizItem.cat}</b> • Назовите выделенную структуру по-русски и по-латыни</div>
+      <div style="max-width:480px;margin:0 auto 14px">
+        <div class="img-choice correct" style="cursor:default">
+          <img src="${currentQuizItem.img}">
+          <button class="zoom-btn" onclick="zoomImage('${currentQuizItem.id}', event)">🔍 Увеличить</button>
+        </div>
+      </div>
+      <div id="latinStepContainer"></div>
+    `;
+    stageShowPassed = true;
+    renderLatinStep();
+    return;
+  }
+
+  let html = `
+    <div style="text-align:center"><span class="badge">${currentQuizItem.cat}</span></div>
+    <div class="quiz-title">${currentQuizItem.ru}</div>
+  `;
+
+  if (currentQuizItem.img && currentChoices.length > 1) {
+    html += `<div class="quiz-subtitle">Этап 1 («Покажи»): выберите препарат, где выделена эта структура</div>
+    <div class="img-grid">
+      ${currentChoices.map((ch, idx) => `
+        <div class="img-choice" id="choice-${ch.id}" onclick="selectImageChoice('${ch.id}')">
+          <img src="${ch.img}" alt="Вариант ${idx+1}">
+          <button class="zoom-btn" onclick="zoomImage('${ch.id}', event)">🔍 Лупа</button>
+        </div>
+      `).join('')}
+    </div>`;
+  } else if (currentQuizItem.img) {
+    html += `<div style="max-width:420px;margin:10px auto"><div class="img-choice correct"><img src="${currentQuizItem.img}"></div></div>`;
+    stageShowPassed = true;
+  } else {
+    html += `<div class="quiz-subtitle">Карточка без фото • Переходим сразу к этапу «Назови»</div>`;
+  }
+
+  html += `<div id="latinStepContainer"></div>`;
+  box.innerHTML = html;
+  if (stageShowPassed) renderLatinStep();
+}
+
+function selectImageChoice(id) {
+  if (stageShowPassed) return;
+  const el = document.getElementById('choice-' + id);
+  if (id === currentQuizItem.id) {
+    el.classList.add('correct');
+    stageShowPassed = true;
+    renderLatinStep();
+  } else {
+    el.classList.add('wrong');
+    mistakes.add(currentQuizItem.id);
+    localStorage.setItem('anat_mistakes', JSON.stringify([...mistakes]));
+    updateMistakesOption();
+  }
+}
+
+function zoomImage(id, e) {
+  e.stopPropagation();
+  const it = items.find(i => i.id === id);
+  if (!it || !it.img) return;
+  document.getElementById('zoomImg').src = it.img;
+  document.getElementById('zoomModal').classList.remove('hidden');
+}
+
+// === 4. ЭТАП 2 («НАЗОВИ» — ПРОВЕРКА ЛАТЫНИ И КНОПКА «МОЙ ОТВЕТ БЫЛ ВЕРНЫМ») ===
+function normalizeLatin(str) {
+  return (str || '').toLowerCase()
+    .replace(/\(.*?\)/g, '')
+    .replace(/\bmm?\.\s*/g, 'musculus ')
+    .replace(/\baa?\.\s*/g, 'arteria ')
+    .replace(/\bvv?\.\s*/g, 'vena ')
+    .replace(/\bnn?\.\s*/g, 'nervus ')
+    .replace(/\bligg?\.\s*/g, 'ligamentum ')
+    .replace(/\bgland\.\s*/g, 'glandula ')
+    .replace(/\bgangl\.\s*/g, 'ganglion ')
+    .replace(/\bproc\.\s*/g, 'processus ')
+    .replace(/\bfor\.\s*/g, 'foramen ')
+    .replace(/\btub\.\s*/g, 'tuberculum ')
+    .replace(/\bart\.\s*/g, 'articulatio ')
+    .replace(/ae/g, 'e').replace(/oe/g, 'e')
+    .replace(/[^a-z\s]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
+function renderLatinStep() {
+  const container = document.getElementById('latinStepContainer');
+  if (!container || !stageShowPassed) return;
+  const mode = document.getElementById('latinMode').value;
+
+  if (mode === 'input') {
+    container.innerHTML = `
+      <div class="latin-box">
+        <div style="font-weight:700;margin-bottom:8px">Этап 2 («Назови»): введите название на латинском</div>
+        <div class="row">
+          <input type="text" id="latinInput" placeholder="Например: m. biceps brachii или Corpus vertebrae..." onkeydown="if(event.key==='Enter')checkLatinInput()" style="flex:1">
+          <button class="btn" onclick="checkLatinInput()">Проверить</button>
+        </div>
+        <div id="latinFeedback"></div>
+      </div>
+    `;
+    setTimeout(() => { const inp = document.getElementById('latinInput'); if(inp) inp.focus(); }, 50);
+  } else if (mode === 'mc') {
+    let pool = items.filter(i => i.id !== currentQuizItem.id && i.cat === currentQuizItem.cat);
+    if (pool.length < 3) pool = items.filter(i => i.id !== currentQuizItem.id);
+    pool.sort(() => Math.random() - 0.5);
+    const opts = [currentQuizItem, ...pool.slice(0, 3)].sort(() => Math.random() - 0.5);
+    container.innerHTML = `
+      <div class="latin-box">
+        <div style="font-weight:700">Этап 2 («Назови»): выберите верный латинский термин</div>
+        <div class="mc-grid">
+          ${opts.map(o => `<button class="mc-btn" id="mc-${o.id}" onclick="checkLatinMC('${o.id}')">${o.lat}</button>`).join('')}
+        </div>
+        <div id="latinFeedback"></div>
+      </div>
+    `;
+  } else {
+    container.innerHTML = `
+      <div class="latin-box" style="text-align:center">
+        <button class="btn" onclick="revealFlashcard()">👁️ Показать ответ на латыни</button>
+        <div id="latinFeedback"></div>
+      </div>
+    `;
+  }
+}
+
+function checkLatinInput() {
+  const inp = document.getElementById('latinInput');
+  if (!inp) return;
+  const userNorm = normalizeLatin(inp.value);
+  const targetNorm = normalizeLatin(currentQuizItem.lat);
+  const fb = document.getElementById('latinFeedback');
+
+  if (userNorm && (userNorm === targetNorm || targetNorm.includes(userNorm) && userNorm.length >= 5)) {
+    recordResult(true);
+    fb.innerHTML = `<div class="feedback ok">✅ Верно! <b>${currentQuizItem.lat}</b> (${currentQuizItem.ru})</div>
+      <div style="margin-top:10px"><button class="btn" onclick="startNextQuestion()">Следующий вопрос ➔</button></div>`;
+  } else {
+    recordResult(false);
+    fb.innerHTML = `<div class="feedback err">❌ Не совпало. Эталон в базе: <b>${currentQuizItem.lat}</b></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" onclick="startNextQuestion()">Дальше ➔</button>
+        <button class="btn btn-warning" onclick="overrideAsCorrect()">✔️ Мой ответ был верным (засчитать)</button>
+      </div>`;
+  }
+}
+
+function overrideAsCorrect() {
+  if (!lastAnswerWrong) return;
+  statWrong = Math.max(0, statWrong - 1);
+  statCorrect++;
+  mistakes.delete(currentQuizItem.id);
+  localStorage.setItem('anat_mistakes', JSON.stringify([...mistakes]));
+  updateStatsUI();
+  startNextQuestion();
+}
+
+function checkLatinMC(id) {
+  const btn = document.getElementById('mc-' + id);
+  const fb = document.getElementById('latinFeedback');
+  if (id === currentQuizItem.id) {
+    btn.classList.add('correct');
+    recordResult(true);
+    fb.innerHTML = `<div style="margin-top:10px"><button class="btn" onclick="startNextQuestion()">Следующий вопрос ➔</button></div>`;
+  } else {
+    btn.classList.add('wrong');
+    document.getElementById('mc-' + currentQuizItem.id).classList.add('correct');
+    recordResult(false);
+    fb.innerHTML = `<div style="margin-top:10px"><button class="btn" onclick="startNextQuestion()">Следующий вопрос ➔</button></div>`;
+  }
+}
+
+function revealFlashcard() {
+  const fb = document.getElementById('latinFeedback');
+  fb.innerHTML = `<div class="feedback ok" style="font-size:1.15rem;margin-bottom:10px"><b>${currentQuizItem.lat}</b><br><span style="font-size:0.9rem">${currentQuizItem.ru}</span></div>
+    <div class="row" style="justify-content:center">
+      <button class="btn btn-success" onclick="recordResult(true);startNextQuestion()">👍 Знал</button>
+      <button class="btn btn-danger" onclick="recordResult(false);startNextQuestion()">👎 Повторить ещё</button>
+    </div>`;
+}
+
+function recordResult(isOk) {
+  if (isOk) {
+    statCorrect++;
+    mistakes.delete(currentQuizItem.id);
+    lastAnswerWrong = false;
+  } else {
+    statWrong++;
+    mistakes.add(currentQuizItem.id);
+    lastAnswerWrong = true;
+  }
+  localStorage.setItem('anat_mistakes', JSON.stringify([...mistakes]));
+  updateStatsUI();
+}
+
+function updateStatsUI() {
+  document.getElementById('statCorrect').textContent = statCorrect;
+  document.getElementById('statWrong').textContent = statWrong;
+  updateMistakesOption();
+}
+
+// === 5. РЕДАКТОР ДЛЯ ДОБРОВОЛЬЦЕВ (CANVAS + PPTX + PDF) ===
+const canvas = document.getElementById('edCanvas');
+const ctx = canvas.getContext('2d');
+let baseImage = null;
+let shapes = [];
+let currentTool = 'blackbox';
+let isDrawing = false, startX = 0, startY = 0, currentPath = [];
+
+function renderEditorList() {
+  const cat = document.getElementById('edCategory').value;
+  const q = document.getElementById('edSearch').value.toLowerCase().trim();
+  const st = document.getElementById('edStatusFilter').value;
+
+  const doneCount = items.filter(i => i.img).length;
+  document.getElementById('progressCount').textContent = `${doneCount} / ${items.length} с фото`;
+
+  const filtered = items.filter(i => {
+    if (cat !== 'ALL' && i.cat !== cat) return false;
+    if (st === 'missing' && i.img) return false;
+    if (st === 'done' && !i.img) return false;
+    if (q && !i.ru.toLowerCase().includes(q) && !i.lat.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const listEl = document.getElementById('structList');
+  listEl.innerHTML = filtered.map(i => `
+    <div class="struct-item ${i.id === currentEdId ? 'active' : ''}" onclick="selectItemForEdit('${i.id}')">
+      <div>
+        <div>${i.ru}</div>
+        <div style="font-size:0.78rem;color:var(--muted);font-style:italic">${i.lat}</div>
+      </div>
+      <span class="status-dot ${i.img ? 'dot-yes' : 'dot-no'}" title="${i.img ? 'Фото загружено' : 'Свободно'}"></span>
+    </div>
+  `).join('');
+
+  if (!currentEdId && filtered.length) selectItemForEdit(filtered[0].id);
+}
+
+function selectItemForEdit(id) {
+  currentEdId = id;
+  const it = items.find(i => i.id === id);
+  if (!it) return;
+  document.getElementById('edItemCat').textContent = it.cat;
+  document.getElementById('edItemRu').textContent = it.ru;
+  document.getElementById('edItemLat').value = it.lat;
+  shapes = [];
+  if (it.img) {
+    loadImageToCanvas(it.img);
+  } else {
+    baseImage = null;
+    redrawCanvas();
+  }
+  renderEditorList();
+}
+
+function loadImageToCanvas(src) {
+  const img = new Image();
+  img.onload = () => {
+    const maxW = 800, maxH = 600;
+    let w = img.width, h = img.height;
+    const ratio = Math.min(maxW / w, maxH / h, 1);
+    canvas.width = Math.round(w * ratio);
+    canvas.height = Math.round(h * ratio);
+    baseImage = img;
+    shapes = [];
+    redrawCanvas();
+  };
+  img.src = src;
+}
+
+function redrawCanvas() {
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!baseImage) {
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Загрузите фото, распакуйте PPTX/PDF или нажмите Ctrl+V', canvas.width/2, canvas.height/2);
+    return;
+  }
+  ctx.drawImage(baseImage, 0, 0, canvas.width, canvas.height);
+  for (const s of shapes) drawShape(s);
+}
+
+function drawShape(s) {
+  ctx.save();
+  if (s.type === 'blackbox') {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(s.x, s.y, s.w, s.h);
+  } else if (s.type === 'blackpen') {
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 18;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    s.pts.forEach((p, idx) => idx === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.stroke();
+  } else if (s.type === 'circle') {
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    const rx = Math.abs(s.w)/2, ry = Math.abs(s.h)/2;
+    ctx.ellipse(s.x + s.w/2, s.y + s.h/2, rx, ry, 0, 0, Math.PI*2);
+    ctx.stroke();
+  } else if (s.type === 'arrow') {
+    ctx.strokeStyle = '#ef4444';
+    ctx.fillStyle = '#ef4444';
+    ctx.lineWidth = 4;
+    const headlen = 16;
+    const angle = Math.atan2(s.y2 - s.y1, s.x2 - s.x1);
+    ctx.beginPath();
+    ctx.moveTo(s.x1, s.y1);
+    ctx.lineTo(s.x2, s.y2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(s.x2, s.y2);
+    ctx.lineTo(s.x2 - headlen * Math.cos(angle - Math.PI/6), s.y2 - headlen * Math.sin(angle - Math.PI/6));
+    ctx.lineTo(s.x2 - headlen * Math.cos(angle + Math.PI/6), s.y2 - headlen * Math.sin(angle + Math.PI/6));
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function setTool(t) {
+  currentTool = t;
+  ['blackbox','blackpen','circle','arrow'].forEach(id => {
+    document.getElementById('tool-' + id).classList.toggle('active', id === t);
+  });
+}
+
+function getCanvasCoords(e) {
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return {
+    x: (clientX - rect.left) * (canvas.width / rect.width),
+    y: (clientY - rect.top) * (canvas.height / rect.height)
+  };
+}
+
+canvas.addEventListener('pointerdown', e => {
+  if (!baseImage) return;
+  isDrawing = true;
+  const pos = getCanvasCoords(e);
+  startX = pos.x; startY = pos.y;
+  if (currentTool === 'blackpen') currentPath = [{x: startX, y: startY}];
+});
+
+canvas.addEventListener('pointermove', e => {
+  if (!isDrawing || !baseImage) return;
+  const pos = getCanvasCoords(e);
+  redrawCanvas();
+  if (currentTool === 'blackbox' || currentTool === 'circle') {
+    drawShape({ type: currentTool, x: startX, y: startY, w: pos.x - startX, h: pos.y - startY });
+  } else if (currentTool === 'arrow') {
+    drawShape({ type: 'arrow', x1: startX, y1: startY, x2: pos.x, y2: pos.y });
+  } else if (currentTool === 'blackpen') {
+    currentPath.push(pos);
+    drawShape({ type: 'blackpen', pts: currentPath });
+  }
+});
+
+window.addEventListener('pointerup', e => {
+  if (!isDrawing) return;
+  isDrawing = false;
+  const pos = getCanvasCoords(e);
+  if (currentTool === 'blackbox' || currentTool === 'circle') {
+    shapes.push({ type: currentTool, x: startX, y: startY, w: pos.x - startX, h: pos.y - startY });
+  } else if (currentTool === 'arrow') {
+    shapes.push({ type: 'arrow', x1: startX, y1: startY, x2: pos.x, y2: pos.y });
+  } else if (currentTool === 'blackpen') {
+    shapes.push({ type: 'blackpen', pts: currentPath });
+  }
+  redrawCanvas();
+});
+
+function undoCanvas() { shapes.pop(); redrawCanvas(); }
+function clearAnnotations() { shapes = []; redrawCanvas(); }
+
+// Загрузка обычной картинки и Ctrl+V
+function handleImageUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => loadImageToCanvas(ev.target.result);
+  reader.readAsDataURL(file);
+}
+
+window.addEventListener('paste', e => {
+  const itemsClip = (e.clipboardData || e.originalEvent.clipboardData).items;
+  for (const item of itemsClip) {
+    if (item.type.indexOf('image') === 0) {
+      const blob = item.getAsFile();
+      const reader = new FileReader();
+      reader.onload = ev => loadImageToCanvas(ev.target.result);
+      reader.readAsDataURL(blob);
+    }
+  }
+});
+
+// Распаковка картинок из презентации .PPTX
+async function handlePptxUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const strip = document.getElementById('mediaStrip');
+  document.getElementById('extractedBox').classList.remove('hidden');
+  document.getElementById('pdfPager').classList.add('hidden');
+  strip.innerHTML = '<span>Распаковка презентации...</span>';
+  try {
+    const zip = await JSZip.loadAsync(file);
+    const mediaFiles = Object.keys(zip.files).filter(k => k.startsWith('ppt/media/') && /\.(png|jpe?g|gif|webp)$/i.test(k));
+    strip.innerHTML = '';
+    for (const path of mediaFiles) {
+      const base64 = await zip.files[path].async('base64');
+      const ext = path.split('.').pop().toLowerCase();
+      const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
+      const dataUrl = `data:${mime};base64,${base64}`;
+      const img = document.createElement('img');
+      img.src = dataUrl;
+      img.className = 'media-thumb';
+      img.onclick = () => loadImageToCanvas(dataUrl);
+      strip.appendChild(img);
+    }
+    if (!mediaFiles.length) strip.innerHTML = '<span>В презентации не найдено картинок.</span>';
+  } catch (err) {
+    strip.innerHTML = '<span>Ошибка чтения PPTX.</span>';
+  }
+}
+
+// Загрузка и листание .PDF
+let currentPdfDoc = null, currentPdfPage = 1;
+async function handlePdfUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const arrayBuffer = await file.arrayBuffer();
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  currentPdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  currentPdfPage = 1;
+  document.getElementById('extractedBox').classList.remove('hidden');
+  document.getElementById('pdfPager').classList.remove('hidden');
+  document.getElementById('mediaStrip').innerHTML = '';
+  renderPdfPageToCanvas();
+}
+
+async function renderPdfPageToCanvas() {
+  if (!currentPdfDoc) return;
+  document.getElementById('pdfPageInfo').textContent = `${currentPdfPage} / ${currentPdfDoc.numPages}`;
+  const page = await currentPdfDoc.getPage(currentPdfPage);
+  const viewport = page.getViewport({ scale: 1.5 });
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = viewport.width;
+  tempCanvas.height = viewport.height;
+  await page.render({ canvasContext: tempCanvas.getContext('2d'), viewport }).promise;
+  loadImageToCanvas(tempCanvas.toDataURL('image/jpeg', 0.85));
+}
+
+function changePdfPage(delta) {
+  if (!currentPdfDoc) return;
+  const next = currentPdfPage + delta;
+  if (next >= 1 && next <= currentPdfDoc.numPages) {
+    currentPdfPage = next;
+    renderPdfPageToCanvas();
+  }
+}
+function takeCurrentPdfPage() { renderPdfPageToCanvas(); }
+
+// Сохранение карточки (сжатие в JPEG ~50-70 КБ + отправка в облако)
+async function saveCurrentCard() {
+  const it = items.find(i => i.id === currentEdId);
+  if (!it) return;
+  it.lat = document.getElementById('edItemLat').value.trim() || it.lat;
+  if (baseImage) {
+    it.img = canvas.toDataURL('image/jpeg', 0.75);
+  }
+  saveLocal();
+  renderEditorList();
+  if (firebaseUrl) {
+    await pushItemToFirebase(it);
+  }
+  alert('Карточка сохранена: ' + it.ru);
+}
+
+async function deleteCurrentPhoto() {
+  const it = items.find(i => i.id === currentEdId);
+  if (!it) return;
+  it.img = null;
+  baseImage = null;
+  shapes = [];
+  redrawCanvas();
+  saveLocal();
+  renderEditorList();
+  if (firebaseUrl) await pushItemToFirebase(it);
+}
+
+// === 6. ОБЛАЧНАЯ СИНХРОНИЗАЦИЯ (FIREBASE REALTIME DATABASE REST API) ===
+async function connectFirebase() {
+  const val = document.getElementById('firebaseUrlInput').value.trim().replace(/\/+$/, '');
+  if (!val.startsWith('https://')) {
+    alert('Введите корректную ссылку Firebase (начинается с https://)');
+    return;
+  }
+  firebaseUrl = val;
+  localStorage.setItem('anat_fb_url', firebaseUrl);
+  await syncFromFirebase();
+}
+
+async function syncFromFirebase() {
+  const badge = document.getElementById('cloudBadge');
+  const msg = document.getElementById('cloudStatusMsg');
+  try {
+    badge.textContent = 'Синхронизация...';
+    const res = await fetch(`${firebaseUrl}/cards.json`);
+    if (!res.ok) throw new Error('Ошибка доступа к БД');
+    const cloudData = await res.json();
+    if (cloudData) {
+      for (const [id, data] of Object.entries(cloudData)) {
+        const existing = items.find(i => i.id === id);
+        if (existing) {
+          if (data.img !== undefined) existing.img = data.img;
+          if (data.lat) existing.lat = data.lat;
+        } else if (data.ru && data.cat) {
+          items.push({ id, cat: data.cat, ru: data.ru, lat: data.lat || '', img: data.img || null });
+        }
+      }
+      saveLocal();
+      populateCategorySelects();
+      renderEditorList();
+    }
+    badge.textContent = '☁️ Облако подключено';
+    badge.style.background = '#dcfce7';
+    badge.style.color = '#166534';
+    if (msg) msg.textContent = '✅ Облако успешно синхронизировано! Все изменения сохраняются в общую базу.';
+  } catch (e) {
+    badge.textContent = 'Ошибка облака';
+    if (msg) msg.textContent = '❌ Не удалось подключиться. Проверьте, что база создана в режиме Test Mode.';
+  }
+}
+
+async function pushItemToFirebase(it) {
+  if (!firebaseUrl) return;
+  try {
+    await fetch(`${firebaseUrl}/cards/${it.id}.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cat: it.cat, ru: it.ru, lat: it.lat, img: it.img })
+    });
+  } catch (e) {}
+}
+
+function copyVolunteerLink() {
+  if (!firebaseUrl) {
+    alert('Сначала вставьте URL облака Firebase и нажмите «Подключить»');
+    return;
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set('db', firebaseUrl);
+  navigator.clipboard.writeText(url.toString());
+  alert('Ссылка для добровольцев скопирована в буфер обмена! Отправьте её в вашу беседу.');
+}
+
+// === 7. СКАЧИВАНИЕ ВСЕГО САЙТА В 1 АВТОНОМНЫЙ HTML-ФАЙЛ ===
+function downloadStandaloneHtml() {
+  const packed = {};
+  for (const it of items) {
+    if (!packed[it.cat]) packed[it.cat] = [];
+    packed[it.cat].push([it.ru, it.lat, it.img]);
+  }
+  let htmlSource = document.documentElement.outerHTML;
+  const replacement = `/*__DB_START__*/\nconst INITIAL_COMPACT_DB = ${JSON.stringify(packed)};\n/*__DB_END__*/`;
+  htmlSource = '<!DOCTYPE html>\n' + htmlSource.replace(/\/\*__DB_START__\*\/[\s\S]*?\/\*__DB_END__\*\//, replacement);
+
+  const blob = new Blob([htmlSource], { type: 'text/html;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'anatomy_trainer_full.html';
+  a.click();
+}
+
+function exportJsonBackup() {
+  const blob = new Blob([JSON.stringify(items)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'anatomy_backup.json';
+  a.click();
+}
+
+function importJsonBackup(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const imported = JSON.parse(ev.target.result);
+      let added = 0;
+      for (const inc of imported) {
+        const match = items.find(i => i.id === inc.id || (i.ru === inc.ru && i.cat === inc.cat));
+        if (match) {
+          if (inc.img) { match.img = inc.img; added++; }
+          if (inc.lat) match.lat = inc.lat;
+        } else {
+          items.push(inc);
+          added++;
+        }
+      }
+      saveLocal();
+      populateCategorySelects();
+      renderEditorList();
+      alert('Импорт завершен! Обновлено карточек: ' + added);
+    } catch (err) { alert('Ошибка чтения файла JSON'); }
+  };
+  reader.readAsText(file);
+}
+
+function importBulkText() {
+  const raw = document.getElementById('bulkInput').value.trim();
+  if (!raw) return;
+  const lines = raw.split('\n');
+  let count = 0;
+  for (const line of lines) {
+    const parts = line.split('|').map(s => s.trim()).filter(Boolean);
+    if (parts.length >= 3) {
+      items.push({ id: 'u_' + Date.now() + '_' + (count++), cat: parts[0], ru: parts[1], lat: parts[2], img: null });
+    } else if (parts.length === 2) {
+      const cat = document.getElementById('edCategory').value === 'ALL' ? 'Остеология' : document.getElementById('edCategory').value;
+      items.push({ id: 'u_' + Date.now() + '_' + (count++), cat, ru: parts[0], lat: parts[1], img: null });
+    }
+  }
+  saveLocal();
+  populateCategorySelects();
+  renderEditorList();
+  document.getElementById('bulkInput').value = '';
+  alert('Добавлено новых структур: ' + count);
+}
+
+window.addEventListener('DOMContentLoaded', initDatabase);
+</script>
+</body>
+</html>
