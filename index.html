@@ -149,7 +149,7 @@
             <option value="browse">Просмотр карточек (атлас)</option>
             <option value="with_img">Назови и покажи</option>
             <option value="reverse">Обратный: 1 фото → вспомнить рус + лат</option>
-            <option value="mistakes">Работа над ошибками (сложные: 0)</option>
+            <option value="mistakes">Работа над ошибками</option>
           </select>
         </div>
         <div class="col">
@@ -1568,7 +1568,7 @@ function populateCategorySelects() {
 
 function updateMistakesOption() {
   const opt = document.querySelector('#quizFilter option[value="mistakes"]');
-  if (opt) opt.textContent = `Работа над ошибками (сложные: ${mistakes.size})`;
+  if (opt) opt.textContent = 'Работа над ошибками';
   const btn = document.getElementById('toggleMistakesDrawerBtn');
   if (btn) btn.textContent = `📋 Список ошибок (${mistakes.size})`;
   renderMistakesDrawer();
@@ -1594,9 +1594,9 @@ function renderMistakesDrawer() {
   }
   d.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-      <b style="color:#9f1239">Сложные структуры для повторения (${errItems.length}):</b>
+      <b style="color:#9f1239">Ошибки (${errItems.length}):</b>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <button class="btn btn-danger btn-sm" onclick="openClearMistakesModal()">🗑️ Очистить весь список ошибок</button>
+        <button class="btn btn-danger btn-sm" onclick="openClearMistakesModal()">🗑️ Очистить список ошибок</button>
         <button class="btn btn-sec btn-sm" onclick="toggleMistakesDrawer()">Скрыть</button>
       </div>
     </div>
@@ -1841,7 +1841,7 @@ function startNextQuestion() {
     if (filter === 'mistakes') {
       box.innerHTML = `<div style="text-align:center;padding:24px;color:var(--muted)">
         <h3>Список ошибок пуст!</h3>
-        <p style="margin:8px 0 14px">Вы разобрали все сложные структуры или ещё не допустили ни одной ошибки.</p>
+        <p style="margin:8px 0 14px">Вы разобрали все свои ошибки.</p>
         <button class="btn" onclick="document.getElementById('quizFilter').value='with_img';startNextQuestion()">Перейти к тренажеру</button>
       </div>`;
     } else {
