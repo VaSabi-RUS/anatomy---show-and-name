@@ -146,7 +146,6 @@
           <select id="quizFilter" onchange="startNextQuestion()">
             <option value="browse">Просмотр карточек (атлас)</option>
             <option value="with_img">Назови и покажи</option>
-            <option value="all_latin">Только латынь</option>
             <option value="reverse">Обратный: 1 фото → вспомнить рус + лат</option>
             <option value="mistakes">Работа над ошибками (сложные: 0)</option>
           </select>
@@ -1776,15 +1775,15 @@ function startNextQuestion() {
     } else {
       box.innerHTML = `<div style="text-align:center;padding:24px;color:var(--muted)">
         <h3>В этом разделе пока нет загруженных фотографий</h3>
-        <p style="margin:8px 0 14px">Вы можете уже сейчас тренировать латынь по всем ${items.length} структурам.</p>
-        <button class="btn" onclick="document.getElementById('quizFilter').value='all_latin';startNextQuestion()">Тренировать только латынь</button>
+        <p style="margin:8px 0 14px">Вы можете посмотреть список всех структур раздела в режиме «Просмотр карточек».</p>
+        <button class="btn" onclick="document.getElementById('quizFilter').value='browse';startNextQuestion()">Открыть просмотр карточек</button>
       </div>`;
     }
     return;
   }
 
   currentQuizItem = pool[Math.floor(Math.random() * pool.length)];
-  stageShowPassed = (filter === 'all_latin' || !currentQuizItem.img);
+  stageShowPassed = !currentQuizItem.img;
   lastAnswerWrong = false;
 
   if (!stageShowPassed && filter !== 'reverse') {
@@ -2029,23 +2028,49 @@ function normalizeLatin(str) {
     .replace(/\s+/g, ' ').trim();
 }
 
+function normalizeRussian(str) {
+  return (str || '').toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/\(.*?\)/g, '')
+    .replace(/[^а-яa-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
 function renderLatinStep() {
   const container = document.getElementById('latinStepContainer');
   if (!container || !stageShowPassed) return;
   const mode = document.getElementById('latinMode').value;
+  const isReverse = document.getElementById('quizFilter').value === 'reverse';
 
   if (mode === 'input') {
-    container.innerHTML = `
-      <div class="latin-box">
-        <div style="font-weight:700;margin-bottom:8px">Этап 2 («Назови»): введите название на латинском</div>
-        <div class="row">
-          <input type="text" id="latinInput" placeholder="Например: m. biceps brachii или Corpus vertebrae..." onkeydown="if(event.key==='Enter')checkLatinInput()" style="flex:1">
-          <button class="btn" onclick="checkLatinInput()">Проверить</button>
+    if (isReverse) {
+      container.innerHTML = `
+        <div class="latin-box">
+          <div style="font-weight:700;margin-bottom:8px">Введите название на русском и латинском</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <input type="text" id="ruInput" placeholder="Русское название (например: Тело позвонка)" onkeydown="if(event.key==='Enter'){const l=document.getElementById('latinInput');if(l&&!l.value.trim())l.focus();else checkLatinInput();}">
+            <div class="row">
+              <input type="text" id="latinInput" placeholder="Латинское название (например: Corpus vertebrae)" onkeydown="if(event.key==='Enter')checkLatinInput()" style="flex:1">
+              <button class="btn" onclick="checkLatinInput()">Проверить</button>
+            </div>
+          </div>
+          <div id="latinFeedback"></div>
         </div>
-        <div id="latinFeedback"></div>
-      </div>
-    `;
-    setTimeout(() => { const inp = document.getElementById('latinInput'); if (inp) inp.focus(); }, 50);
+      `;
+      setTimeout(() => { const inp = document.getElementById('ruInput'); if (inp) inp.focus(); }, 50);
+    } else {
+      container.innerHTML = `
+        <div class="latin-box">
+          <div style="font-weight:700;margin-bottom:8px">Этап 2 («Назови»): введите название на латинском</div>
+          <div class="row">
+            <input type="text" id="latinInput" placeholder="Например: m. biceps brachii или Corpus vertebrae..." onkeydown="if(event.key==='Enter')checkLatinInput()" style="flex:1">
+            <button class="btn" onclick="checkLatinInput()">Проверить</button>
+          </div>
+          <div id="latinFeedback"></div>
+        </div>
+      `;
+      setTimeout(() => { const inp = document.getElementById('latinInput'); if (inp) inp.focus(); }, 50);
+    }
   } else if (mode === 'mc') {
     let pool = items.filter(i => i.id !== currentQuizItem.id && i.cat === currentQuizItem.cat);
     if (pool.length < 3) pool = items.filter(i => i.id !== currentQuizItem.id);
@@ -2053,9 +2078,12 @@ function renderLatinStep() {
     const opts = [currentQuizItem, ...pool.slice(0, 3)].sort(() => Math.random() - 0.5);
     container.innerHTML = `
       <div class="latin-box">
-        <div style="font-weight:700">Этап 2 («Назови»): выберите верный латинский термин</div>
+        <div style="font-weight:700">${isReverse ? 'Выберите верное название (русский + латынь)' : 'Этап 2 («Назови»): выберите верный латинский термин'}</div>
         <div class="mc-grid">
-          ${opts.map(o => `<button class="mc-btn" id="mc-${o.id}" onclick="checkLatinMC('${o.id}')">${o.lat}</button>`).join('')}
+          ${opts.map(o => isReverse
+            ? `<button class="mc-btn" id="mc-${o.id}" onclick="checkLatinMC('${o.id}')" style="font-style:normal"><div>${o.ru}</div><div style="font-style:italic;color:var(--primary);font-size:0.88rem;margin-top:2px">${o.lat}</div></button>`
+            : `<button class="mc-btn" id="mc-${o.id}" onclick="checkLatinMC('${o.id}')">${o.lat}</button>`
+          ).join('')}
         </div>
         <div id="latinFeedback"></div>
       </div>
@@ -2063,7 +2091,7 @@ function renderLatinStep() {
   } else {
     container.innerHTML = `
       <div class="latin-box" style="text-align:center">
-        <button class="btn" onclick="revealFlashcard()">👁️ Показать ответ на латыни</button>
+        <button class="btn" onclick="revealFlashcard()">${isReverse ? '👁️ Показать ответ (рус + лат)' : '👁️ Показать ответ на латыни'}</button>
         <div id="latinFeedback"></div>
       </div>
     `;
@@ -2073,11 +2101,37 @@ function renderLatinStep() {
 function checkLatinInput() {
   const inp = document.getElementById('latinInput');
   if (!inp) return;
+  const isReverse = document.getElementById('quizFilter').value === 'reverse';
   const userNorm = normalizeLatin(inp.value);
   const targetNorm = normalizeLatin(currentQuizItem.lat);
+  const latOk = Boolean(userNorm && (userNorm === targetNorm || (targetNorm.includes(userNorm) && userNorm.length >= 5)));
   const fb = document.getElementById('latinFeedback');
 
-  if (userNorm && (userNorm === targetNorm || (targetNorm.includes(userNorm) && userNorm.length >= 5))) {
+  if (isReverse) {
+    const ruInp = document.getElementById('ruInput');
+    const userRu = normalizeRussian(ruInp ? ruInp.value : '');
+    const targetRu = normalizeRussian(currentQuizItem.ru);
+    const ruOk = Boolean(userRu && (userRu === targetRu || (targetRu.includes(userRu) && userRu.length >= 4)));
+
+    if (ruOk && latOk) {
+      recordResult(true);
+      fb.innerHTML = `<div class="feedback ok">✅ Верно! <b>${currentQuizItem.ru}</b> — <i>${currentQuizItem.lat}</i></div>
+        <div style="margin-top:10px"><button class="btn" onclick="startNextQuestion()">Следующий вопрос ➔</button></div>`;
+    } else {
+      recordResult(false);
+      fb.innerHTML = `<div class="feedback err">
+          <div>${ruOk ? '✅' : '❌'} Русский: <b>${currentQuizItem.ru}</b></div>
+          <div>${latOk ? '✅' : '❌'} Латынь: <b>${currentQuizItem.lat}</b></div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn" onclick="startNextQuestion()">Дальше ➔</button>
+          <button class="btn btn-warning" onclick="overrideAsCorrect()">✔️ Мой ответ был верным (засчитать)</button>
+        </div>`;
+    }
+    return;
+  }
+
+  if (latOk) {
     recordResult(true);
     fb.innerHTML = `<div class="feedback ok">✅ Верно! <b>${currentQuizItem.lat}</b> (${currentQuizItem.ru})</div>
       <div style="margin-top:10px"><button class="btn" onclick="startNextQuestion()">Следующий вопрос ➔</button></div>`;
