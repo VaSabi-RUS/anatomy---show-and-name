@@ -1412,15 +1412,25 @@ let lastMistakeItemId = null;
 let currentEdId = null;
 let browseSearch = '';
 
-// Настройки инструментов редактора с сохранением между карточками и сессиями
+// Настройки инструментов редактора (независимые цвет и толщина для каждого инструмента)
 const DEFAULT_TOOL_SETTINGS = {
-  pointerColor: '#00e5ff',
-  pointerWidth: 4,
-  blackoutColor: '#000000',
-  blackoutWidth: 18,
-  eraserWidth: 20
+  blackbox: { color: '#000000', width: 18 },
+  blackpen: { color: '#000000', width: 18 },
+  eraser:   { color: '#000000', width: 20 },
+  line:     { color: '#ef4444', width: 4 },
+  circle:   { color: '#ef4444', width: 4 },
+  arrow:    { color: '#ef4444', width: 4 }
 };
-let toolSettings = Object.assign({}, DEFAULT_TOOL_SETTINGS, JSON.parse(localStorage.getItem('anat_tool_settings_v1') || '{}'));
+function loadToolSettings() {
+  const res = {};
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('anat_tool_settings_v2') || '{}'); } catch (e) {}
+  for (const [k, def] of Object.entries(DEFAULT_TOOL_SETTINGS)) {
+    res[k] = Object.assign({}, def, (saved && typeof saved[k] === 'object' && saved[k]) ? saved[k] : {});
+  }
+  return res;
+}
+let toolSettings = loadToolSettings();
 
 function initDatabase() {
   // Собираем эталонный список структур в точном порядке методички
@@ -1812,7 +1822,7 @@ function renderQuizArena() {
     <div class="quiz-title">${currentQuizItem.ru}</div>
   `;
 
-  if (filter !== 'all_latin' && currentQuizItem.img && currentChoices.length > 1) {
+  if (currentQuizItem.img && currentChoices.length > 1) {
     html += `<div class="quiz-subtitle">Этап 1 («Покажи»): выберите препарат, где выделена эта структура</div>
     <div class="img-grid">
       ${currentChoices.map((ch, idx) => `
@@ -1822,7 +1832,7 @@ function renderQuizArena() {
         </div>
       `).join('')}
     </div>`;
-  } else if (filter !== 'all_latin' && currentQuizItem.img) {
+  } else if (currentQuizItem.img) {
     html += `<div style="max-width:420px;margin:10px auto">
       <div class="img-choice correct">
         <img src="${currentQuizItem.img}" onclick="zoomImage('${currentQuizItem.id}', event)" style="cursor:zoom-in">
@@ -2151,17 +2161,16 @@ let shapes = [];
 let currentTool = 'blackbox';
 let isDrawing = false, startX = 0, startY = 0, currentPath = [];
 
-function isBlackoutTool(t) {
-  return t === 'blackbox' || t === 'blackpen';
+function getToolCfg(t) {
+  return toolSettings[t] || DEFAULT_TOOL_SETTINGS[t] || { color: '#ef4444', width: 4 };
 }
 
 function getActiveToolColor() {
-  return isBlackoutTool(currentTool) ? toolSettings.blackoutColor : toolSettings.pointerColor;
+  return getToolCfg(currentTool).color;
 }
 
 function getActiveToolWidth() {
-  if (currentTool === 'eraser') return toolSettings.eraserWidth;
-  return isBlackoutTool(currentTool) ? toolSettings.blackoutWidth : toolSettings.pointerWidth;
+  return getToolCfg(currentTool).width;
 }
 
 function syncStylePanelUI() {
@@ -2188,16 +2197,14 @@ function syncStylePanelUI() {
 function onToolStyleChange() {
   const col = document.getElementById('toolColorInput').value;
   const wid = parseInt(document.getElementById('toolWidthInput').value, 10) || 4;
-  if (currentTool === 'eraser') {
-    toolSettings.eraserWidth = wid;
-  } else if (isBlackoutTool(currentTool)) {
-    toolSettings.blackoutColor = col;
-    toolSettings.blackoutWidth = wid;
-  } else {
-    toolSettings.pointerColor = col;
-    toolSettings.pointerWidth = wid;
+  if (!toolSettings[currentTool]) {
+    toolSettings[currentTool] = Object.assign({}, getToolCfg(currentTool));
   }
-  localStorage.setItem('anat_tool_settings_v1', JSON.stringify(toolSettings));
+  if (currentTool !== 'eraser') {
+    toolSettings[currentTool].color = col;
+  }
+  toolSettings[currentTool].width = wid;
+  localStorage.setItem('anat_tool_settings_v2', JSON.stringify(toolSettings));
   syncStylePanelUI();
 }
 
@@ -2211,8 +2218,12 @@ function pickSwatch(hex) {
 }
 
 function resetToolSettingsToDefault() {
-  toolSettings = Object.assign({}, DEFAULT_TOOL_SETTINGS);
-  localStorage.setItem('anat_tool_settings_v1', JSON.stringify(toolSettings));
+  const fresh = {};
+  for (const [k, def] of Object.entries(DEFAULT_TOOL_SETTINGS)) {
+    fresh[k] = Object.assign({}, def);
+  }
+  toolSettings = fresh;
+  localStorage.setItem('anat_tool_settings_v2', JSON.stringify(toolSettings));
   syncStylePanelUI();
 }
 
@@ -2313,8 +2324,9 @@ function redrawCanvas(previewShape) {
 
 function drawShape(targetCtx, s) {
   targetCtx.save();
-  const col = s.color || (isBlackoutTool(s.type) ? '#000000' : '#00e5ff');
-  const wid = s.width || (s.type === 'eraser' ? 20 : (isBlackoutTool(s.type) ? 18 : 4));
+  const defCfg = DEFAULT_TOOL_SETTINGS[s.type] || { color: '#ef4444', width: 4 };
+  const col = s.color || defCfg.color;
+  const wid = s.width || defCfg.width;
 
   if (s.type === 'blackbox') {
     targetCtx.fillStyle = col;
