@@ -353,6 +353,20 @@
   </div>
 </div>
 
+<!-- Подтверждение очистки списка ошибок -->
+<div id="clearMistakesModal" class="modal hidden" style="background:rgba(15,23,42,0.65);z-index:150" onclick="if(event.target===this)closeClearMistakesModal()">
+  <div class="card" style="max-width:460px;width:100%;margin:0;box-shadow:0 12px 32px rgba(0,0,0,0.25)">
+    <h3 style="margin-bottom:8px;font-size:1.1rem">Очистить список ошибок?</h3>
+    <p style="font-size:0.92rem;color:var(--muted);margin-bottom:16px">
+      Все структуры будут удалены из списка ошибок, а счётчики текущей сессии обнулятся.
+    </p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-danger" onclick="clearAllMistakes()">🗑️ Очистить список ошибок</button>
+      <button class="btn btn-sec" onclick="closeClearMistakesModal()">Отмена</button>
+    </div>
+  </div>
+</div>
+
 <!-- Кнопка «Наверх» -->
 <button id="scrollTopBtn" class="scroll-top-btn hidden" onclick="scrollToTop()">⬆️ Наверх</button>
 
@@ -1434,7 +1448,6 @@ let edBaseChanged = false;
 let edSavedShapesJson = '[]';
 let browseSearch = '';
 let mistakesSearch = '';
-let confirmClearMistakes = false;
 
 // Настройки инструментов редактора (независимые цвет и толщина для каждого инструмента)
 const DEFAULT_TOOL_SETTINGS = {
@@ -1565,7 +1578,6 @@ function toggleMistakesDrawer() {
   const d = document.getElementById('mistakesDrawer');
   if (!d) return;
   d.classList.toggle('hidden');
-  if (d.classList.contains('hidden')) confirmClearMistakes = false;
   renderMistakesDrawer();
 }
 
@@ -1574,23 +1586,19 @@ function renderMistakesDrawer() {
   if (!d || d.classList.contains('hidden')) return;
   const errItems = items.filter(i => mistakes.has(i.id));
   if (!errItems.length) {
-    confirmClearMistakes = false;
     d.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
       <span style="font-weight:600;color:var(--muted)">Список ошибок пуст — все структуры отвечены верно!</span>
       <button class="btn btn-sec btn-sm" onclick="toggleMistakesDrawer()">Закрыть</button>
     </div>`;
     return;
   }
-  const actionsHtml = confirmClearMistakes
-    ? `<span style="font-size:0.86rem;font-weight:700;color:#9f1239">Очистить список ошибок?</span>
-       <button class="btn btn-danger btn-sm" onclick="clearAllMistakes()">Очистить список ошибок</button>
-       <button class="btn btn-sec btn-sm" onclick="confirmClearMistakes=false;renderMistakesDrawer()">Отмена</button>`
-    : `<button class="btn btn-danger btn-sm" onclick="confirmClearMistakes=true;renderMistakesDrawer()">🗑️ Очистить весь список ошибок</button>
-       <button class="btn btn-sec btn-sm" onclick="toggleMistakesDrawer()">Скрыть</button>`;
   d.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
       <b style="color:#9f1239">Сложные структуры для повторения (${errItems.length}):</b>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${actionsHtml}</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-danger btn-sm" onclick="openClearMistakesModal()">🗑️ Очистить весь список ошибок</button>
+        <button class="btn btn-sec btn-sm" onclick="toggleMistakesDrawer()">Скрыть</button>
+      </div>
     </div>
     <input type="text" id="mistakesSearchInput" value="${mistakesSearch.replace(/"/g, '&quot;')}" placeholder="Поиск по списку ошибок (рус / лат)..." oninput="mistakesSearch=this.value;updateMistakesList()" style="margin-bottom:8px">
     <div id="mistakesListContainer" style="max-height:220px;overflow-y:auto"></div>
@@ -1626,8 +1634,18 @@ function removeSingleMistake(id) {
   if (document.getElementById('quizFilter').value === 'mistakes') startNextQuestion();
 }
 
+function openClearMistakesModal() {
+  const m = document.getElementById('clearMistakesModal');
+  if (m) m.classList.remove('hidden');
+}
+
+function closeClearMistakesModal() {
+  const m = document.getElementById('clearMistakesModal');
+  if (m) m.classList.add('hidden');
+}
+
 function clearAllMistakes() {
-  confirmClearMistakes = false;
+  closeClearMistakesModal();
   mistakes.clear();
   mistakesSearch = '';
   statCorrect = 0;
@@ -1976,6 +1994,8 @@ function setupInteractiveZoom() {
       if (!modal.classList.contains('hidden')) closeZoomModal();
       const um = document.getElementById('unsavedModal');
       if (um && !um.classList.contains('hidden')) resolveUnsavedModal('stay');
+      const cm = document.getElementById('clearMistakesModal');
+      if (cm && !cm.classList.contains('hidden')) closeClearMistakesModal();
     }
   });
 
@@ -2812,7 +2832,7 @@ function downloadStandaloneHtml() {
     const el = clone.querySelector('#' + id);
     if (el) el.innerHTML = '';
   });
-  ['mistakesDrawer', 'extractedBox', 'zoomModal', 'unsavedModal', 'scrollTopBtn'].forEach(id => {
+  ['mistakesDrawer', 'extractedBox', 'zoomModal', 'unsavedModal', 'clearMistakesModal', 'scrollTopBtn'].forEach(id => {
     const el = clone.querySelector('#' + id);
     if (el) el.classList.add('hidden');
   });
