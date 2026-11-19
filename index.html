@@ -169,7 +169,6 @@
           <span>С фото в этом разделе: <b id="statWithPhoto">0</b></span>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button id="undoLastMistakeBtn" class="btn btn-warning btn-sm hidden" onclick="undoPreviousMistake()">↩️ Засчитать прошлый ответ</button>
           <button id="toggleMistakesDrawerBtn" class="btn btn-sec btn-sm" onclick="toggleMistakesDrawer()">📋 Список ошибок (0)</button>
         </div>
       </div>
@@ -1407,9 +1406,9 @@ let mistakes = new Set(JSON.parse(localStorage.getItem('anat_mistakes') || '[]')
 let firebaseUrl = ((typeof SAVED_FIREBASE_URL !== 'undefined' && SAVED_FIREBASE_URL) || localStorage.getItem('anat_fb_url') || '').trim().replace(/\/+$/, '');
 let statCorrect = 0, statWrong = 0;
 let currentQuizItem = null, currentChoices = [], stageShowPassed = false, lastAnswerWrong = false;
-let lastMistakeItemId = null;
 let currentEdId = null;
 let browseSearch = '';
+let mistakesSearch = '';
 
 // Настройки инструментов редактора (независимые цвет и толщина для каждого инструмента)
 const DEFAULT_TOOL_SETTINGS = {
@@ -1533,8 +1532,6 @@ function updateMistakesOption() {
   if (opt) opt.textContent = `Работа над ошибками (сложные: ${mistakes.size})`;
   const btn = document.getElementById('toggleMistakesDrawerBtn');
   if (btn) btn.textContent = `📋 Список ошибок (${mistakes.size})`;
-  const undoBtn = document.getElementById('undoLastMistakeBtn');
-  if (undoBtn) undoBtn.classList.toggle('hidden', !lastMistakeItemId);
   renderMistakesDrawer();
 }
 
@@ -1564,43 +1561,49 @@ function renderMistakesDrawer() {
         <button class="btn btn-sec btn-sm" onclick="toggleMistakesDrawer()">Скрыть</button>
       </div>
     </div>
-    <div style="max-height:220px;overflow-y:auto">
-      ${errItems.map(it => `
-        <div class="mistake-row">
-          <span><b>${it.ru}</b> <i style="color:var(--muted)">(${it.lat})</i></span>
-          <button class="btn btn-sec btn-sm" onclick="removeSingleMistake('${it.id}')">✕ Убрать</button>
-        </div>
-      `).join('')}
-    </div>
+    <input type="text" id="mistakesSearchInput" value="${mistakesSearch.replace(/"/g, '&quot;')}" placeholder="Поиск по списку ошибок (рус / лат)..." oninput="mistakesSearch=this.value;updateMistakesList()" style="margin-bottom:8px">
+    <div id="mistakesListContainer" style="max-height:220px;overflow-y:auto"></div>
   `;
+  updateMistakesList();
+}
+
+function updateMistakesList() {
+  const listBox = document.getElementById('mistakesListContainer');
+  if (!listBox) return;
+  const q = mistakesSearch.toLowerCase().trim();
+  const filtered = items.filter(i => {
+    if (!mistakes.has(i.id)) return false;
+    if (q && !i.ru.toLowerCase().includes(q) && !i.lat.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  if (!filtered.length) {
+    listBox.innerHTML = `<div style="text-align:center;padding:12px;color:var(--muted);font-size:0.88rem">По запросу ничего не найдено</div>`;
+    return;
+  }
+  listBox.innerHTML = filtered.map(it => `
+    <div class="mistake-row">
+      <span><b>${it.ru}</b> <i style="color:var(--muted)">(${it.lat})</i></span>
+      <button class="btn btn-sec btn-sm" onclick="removeSingleMistake('${it.id}')">✕ Убрать</button>
+    </div>
+  `).join('');
 }
 
 function removeSingleMistake(id) {
   mistakes.delete(id);
-  if (lastMistakeItemId === id) lastMistakeItemId = null;
   localStorage.setItem('anat_mistakes', JSON.stringify([...mistakes]));
   updateMistakesOption();
   if (document.getElementById('quizFilter').value === 'mistakes') startNextQuestion();
 }
 
 function clearAllMistakes() {
+  if (!confirm('Очистить весь список ошибок?')) return;
   mistakes.clear();
-  lastMistakeItemId = null;
+  mistakesSearch = '';
   statCorrect = 0;
   statWrong = 0;
   localStorage.setItem('anat_mistakes', '[]');
   updateStatsUI();
   if (document.getElementById('quizFilter').value === 'mistakes') startNextQuestion();
-}
-
-function undoPreviousMistake() {
-  if (!lastMistakeItemId) return;
-  mistakes.delete(lastMistakeItemId);
-  lastMistakeItemId = null;
-  statWrong = Math.max(0, statWrong - 1);
-  statCorrect++;
-  localStorage.setItem('anat_mistakes', JSON.stringify([...mistakes]));
-  updateStatsUI();
 }
 
 function switchTab(tab) {
@@ -1858,7 +1861,6 @@ function selectImageChoice(id) {
   } else {
     el.classList.add('wrong');
     mistakes.add(currentQuizItem.id);
-    lastMistakeItemId = currentQuizItem.id;
     localStorage.setItem('anat_mistakes', JSON.stringify([...mistakes]));
     updateMistakesOption();
   }
@@ -2150,7 +2152,6 @@ function overrideAsCorrect() {
   statWrong = Math.max(0, statWrong - 1);
   statCorrect++;
   mistakes.delete(currentQuizItem.id);
-  if (lastMistakeItemId === currentQuizItem.id) lastMistakeItemId = null;
   localStorage.setItem('anat_mistakes', JSON.stringify([...mistakes]));
   updateStatsUI();
   startNextQuestion();
@@ -2192,7 +2193,6 @@ function recordResult(isOk) {
   } else {
     statWrong++;
     mistakes.add(currentQuizItem.id);
-    lastMistakeItemId = currentQuizItem.id;
     lastAnswerWrong = true;
   }
   localStorage.setItem('anat_mistakes', JSON.stringify([...mistakes]));
