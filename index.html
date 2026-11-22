@@ -100,6 +100,7 @@
   .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
   .tool-btn { padding: 8px 12px; border-radius: 8px; border: 2px solid var(--border); background: #fff; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
   .tool-btn.active { border-color: var(--primary); background: #eff6ff; color: var(--primary); }
+  .tool-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .style-panel { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; background: #f8fafc; border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; }
   .swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #cbd5e1; cursor: pointer; transition: 0.15s; display: inline-block; }
   .swatch:hover, .swatch.active { transform: scale(1.18); border-color: #1e293b; }
@@ -200,9 +201,9 @@
         <div id="edCurrentHeader" style="margin-bottom:12px">
           <div style="font-size:0.82rem;color:var(--muted)" id="edItemCat">Выберите структуру слева</div>
           <h2 id="edItemRu" style="font-size:1.3rem">—</h2>
-          <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+          <div style="margin-top:4px;display:flex;gap:6px;align-items:baseline;flex-wrap:wrap">
             <span style="font-size:0.85rem;font-weight:600;color:var(--muted)">Латынь:</span>
-            <input type="text" id="edItemLat" placeholder="Латинское название" style="font-style:italic;max-width:360px">
+            <span id="edItemLat" style="font-style:italic;font-size:0.98rem;color:var(--primary);font-weight:600">—</span>
           </div>
         </div>
 
@@ -245,6 +246,7 @@
           <button class="tool-btn" id="tool-circle" onclick="setTool('circle')">⭕ Кружок</button>
           <button class="tool-btn" id="tool-arrow" onclick="setTool('arrow')">↗️ Стрелка</button>
           <button class="tool-btn" onclick="undoCanvas()">↩️ Шаг назад</button>
+          <button class="tool-btn" id="redoBtn" onclick="redoCanvas()" disabled>↪️ Шаг вперед</button>
           <button class="tool-btn" onclick="clearAnnotations()">🗑️ Сбросить пометки</button>
         </div>
 
@@ -2287,6 +2289,7 @@ const annotCanvas = document.createElement('canvas');
 const annotCtx = annotCanvas.getContext('2d');
 let baseImage = null;
 let shapes = [];
+let redoStack = [];
 let currentTool = 'blackbox';
 let isDrawing = false, startX = 0, startY = 0, currentPath = [];
 
@@ -2399,10 +2402,8 @@ function hasUnsavedEditorChanges() {
   if (!currentEdId) return false;
   const it = items.find(i => i.id === currentEdId);
   if (!it) return false;
-  const latInp = document.getElementById('edItemLat');
-  const latChanged = latInp ? (latInp.value.trim() !== (it.lat || '').trim()) : false;
   const shapesChanged = JSON.stringify(shapes) !== edSavedShapesJson;
-  return edBaseChanged || shapesChanged || latChanged;
+  return edBaseChanged || shapesChanged;
 }
 
 function selectItemForEdit(id) {
@@ -2441,8 +2442,10 @@ function applySelectItemForEdit(id) {
   if (!it) return;
   document.getElementById('edItemCat').textContent = it.cat;
   document.getElementById('edItemRu').textContent = it.ru;
-  document.getElementById('edItemLat').value = it.lat;
+  document.getElementById('edItemLat').textContent = it.lat;
   shapes = [];
+  redoStack = [];
+  updateRedoBtn();
   if (it.img) {
     loadImageToCanvas(it.img, false);
   } else {
@@ -2464,6 +2467,8 @@ function loadImageToCanvas(src, markDirty = false) {
     annotCanvas.height = canvas.height;
     baseImage = img;
     shapes = [];
+    redoStack = [];
+    updateRedoBtn();
     if (markDirty) edBaseChanged = true;
     redrawCanvas();
   };
@@ -2598,18 +2603,46 @@ window.addEventListener('pointerup', e => {
   const wid = getActiveToolWidth();
   const moved = Math.hypot(pos.x - startX, pos.y - startY);
 
+  let addedShape = false;
   if (currentTool === 'blackbox' || currentTool === 'circle') {
-    if (moved >= 3) shapes.push({ type: currentTool, x: startX, y: startY, w: pos.x - startX, h: pos.y - startY, color: col, width: wid });
+    if (moved >= 3) { shapes.push({ type: currentTool, x: startX, y: startY, w: pos.x - startX, h: pos.y - startY, color: col, width: wid }); addedShape = true; }
   } else if (currentTool === 'arrow' || currentTool === 'line') {
-    if (moved >= 3) shapes.push({ type: currentTool, x1: startX, y1: startY, x2: pos.x, y2: pos.y, color: col, width: wid });
+    if (moved >= 3) { shapes.push({ type: currentTool, x1: startX, y1: startY, x2: pos.x, y2: pos.y, color: col, width: wid }); addedShape = true; }
   } else if (currentTool === 'blackpen' || currentTool === 'eraser') {
-    shapes.push({ type: currentTool, pts: currentPath, color: col, width: wid });
+    shapes.push({ type: currentTool, pts: currentPath, color: col, width: wid }); addedShape = true;
+  }
+  if (addedShape) {
+    redoStack = [];
+    updateRedoBtn();
   }
   redrawCanvas();
 });
 
-function undoCanvas() { shapes.pop(); redrawCanvas(); }
-function clearAnnotations() { shapes = []; redrawCanvas(); }
+function updateRedoBtn() {
+  const btn = document.getElementById('redoBtn');
+  if (btn) btn.disabled = redoStack.length === 0;
+}
+
+function undoCanvas() {
+  if (!shapes.length) return;
+  redoStack.push(shapes.pop());
+  updateRedoBtn();
+  redrawCanvas();
+}
+
+function redoCanvas() {
+  if (!redoStack.length) return;
+  shapes.push(redoStack.pop());
+  updateRedoBtn();
+  redrawCanvas();
+}
+
+function clearAnnotations() {
+  shapes = [];
+  redoStack = [];
+  updateRedoBtn();
+  redrawCanvas();
+}
 
 function handleImageUpload(e) {
   const file = e.target.files[0];
@@ -2699,7 +2732,6 @@ function takeCurrentPdfPage() { renderPdfPageToCanvas(); }
 async function saveCurrentCard() {
   const it = items.find(i => i.id === currentEdId);
   if (!it) return;
-  it.lat = document.getElementById('edItemLat').value.trim() || it.lat;
   if (baseImage) {
     it.img = canvas.toDataURL('image/jpeg', 0.75);
   }
@@ -2726,6 +2758,8 @@ async function deleteCurrentPhoto() {
   it.img = null;
   baseImage = null;
   shapes = [];
+  redoStack = [];
+  updateRedoBtn();
   edBaseChanged = false;
   edSavedShapesJson = '[]';
   redrawCanvas();
@@ -2836,6 +2870,8 @@ function downloadStandaloneHtml() {
     const el = clone.querySelector('#' + id);
     if (el) el.classList.add('hidden');
   });
+  const expRedoBtn = clone.querySelector('#redoBtn');
+  if (expRedoBtn) expRedoBtn.setAttribute('disabled', '');
 
   ['quiz','editor','cloud'].forEach((t, i) => {
     const tabEl = clone.querySelector('#tab-' + t);
