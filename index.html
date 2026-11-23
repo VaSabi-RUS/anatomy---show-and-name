@@ -95,8 +95,9 @@
   .dot-yes { background: var(--success); }
   .dot-no { background: #cbd5e1; }
 
-  .canvas-wrap { background: #0f172a; border-radius: 10px; overflow: hidden; display: flex; justify-content: center; align-items: center; min-height: 320px; position: relative; border: 2px dashed #475569; }
-  canvas { max-width: 100%; max-height: 520px; touch-action: none; cursor: crosshair; }
+  .canvas-wrap { background: #0f172a; border-radius: 10px; overflow: hidden; display: flex; justify-content: center; align-items: center; min-height: 320px; position: relative; border: 2px dashed #475569; touch-action: none; user-select: none; }
+  canvas { max-width: 100%; max-height: 520px; touch-action: none; cursor: crosshair; transform-origin: center center; will-change: transform; }
+  .ed-zoom-reset { position: absolute; top: 8px; right: 8px; z-index: 15; background: rgba(15,23,42,0.82); color: #fff; border: 1px solid rgba(255,255,255,0.28); border-radius: 8px; padding: 4px 10px; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
   .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
   .tool-btn { padding: 8px 12px; border-radius: 8px; border: 2px solid var(--border); background: #fff; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
   .tool-btn.active { border-color: var(--primary); background: #eff6ff; color: var(--primary); }
@@ -271,8 +272,9 @@
           <button class="btn btn-sec btn-sm" onclick="resetToolSettingsToDefault()">🔄 По умолчанию</button>
         </div>
 
-        <div class="canvas-wrap">
+        <div class="canvas-wrap" id="canvasWrap">
           <canvas id="edCanvas" width="700" height="500"></canvas>
+          <button type="button" id="edZoomResetBtn" class="ed-zoom-reset hidden" onpointerdown="event.stopPropagation()" onclick="resetEdZoom()">🔍 100%</button>
         </div>
 
         <div class="row" style="margin-top:14px;justify-content:space-between">
@@ -304,7 +306,8 @@
         Вы в любой момент можете скачать весь этот сайт вместе со всеми загруженными фотографиями в один-единственный файл <b>.html</b>. Он будет открываться на любом телефоне и компьютере вообще без интернета.
       </p>
       <div class="row">
-        <button class="btn btn-success" onclick="downloadStandaloneHtml()">⬇️ Скачать готовый сайт со всеми фото (.HTML)</button>
+        <button class="btn btn-success" id="downloadHtmlBtn" onclick="downloadStandaloneHtml()">⬇️ Скачать готовый сайт со всеми фото (.HTML)</button>
+        <button class="btn btn-sec" id="exportStaticZipBtn" onclick="exportStaticSectionsZip()">🗂️ Экспорт разделов для Cloudflare / GitHub (.ZIP)</button>
         <button class="btn btn-sec" onclick="exportJsonBackup()">📦 Экспорт пакета базы (.JSON)</button>
         <label class="btn btn-sec" style="cursor:pointer">
           📂 Загрузить пакет от добровольца (.JSON)
@@ -1450,6 +1453,13 @@ let edBaseChanged = false;
 let edSavedShapesJson = '[]';
 let browseSearch = '';
 let mistakesSearch = '';
+let isVolunteerMode = false;
+let staticManifest = null;
+let staticPhotoIds = new Set();
+let loadedStaticSections = new Set();
+let staticSectionPromises = {};
+let browseObserver = null;
+let quizQuestionToken = 0;
 
 // Настройки инструментов редактора (независимые цвет и толщина для каждого инструмента)
 const DEFAULT_TOOL_SETTINGS = {
@@ -1471,7 +1481,102 @@ function loadToolSettings() {
 }
 let toolSettings = loadToolSettings();
 
-function initDatabase() {
+function itemHasPhoto(it) {
+  return Boolean(it && (it.img || (staticManifest && staticPhotoIds.has(it.id))));
+}
+
+async function initStaticData(hasEmbeddedPhotos) {
+  if (window.location.protocol === 'file:' && hasEmbeddedPhotos) return false;
+  const badge = document.getElementById('cloudBadge');
+  try {
+    const res = await fetch(`./data/manifest.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return false;
+    const manifest = await res.json();
+    if (!manifest || !manifest.sections) return false;
+    const allIds = new Set();
+    for (const [cat, sec] of Object.entries(manifest.sections)) {
+      if (sec && Array.isArray(sec.ids)) {
+        sec.ids.forEach(id => allIds.add(id));
+      }
+      if (!sec || !sec.count) {
+        loadedStaticSections.add(cat);
+      }
+    }
+    if (!allIds.size) return false;
+
+    staticManifest = manifest;
+    staticPhotoIds = allIds;
+    if (!hasEmbeddedPhotos) {
+      for (const it of items) it.img = null;
+    }
+    if (badge) {
+      badge.textContent = '⚡ Быстрый режим';
+      badge.style.background = '#dcfce7';
+      badge.style.color = '#166534';
+    }
+    startNextQuestion();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function ensureStaticSectionLoaded(cat) {
+  if (!staticManifest || !cat || loadedStaticSections.has(cat)) return;
+  const sec = staticManifest.sections && staticManifest.sections[cat];
+  if (!sec || !sec.file || !sec.count) {
+    loadedStaticSections.add(cat);
+    return;
+  }
+  if (staticSectionPromises[cat]) return staticSectionPromises[cat];
+
+  staticSectionPromises[cat] = (async () => {
+    try {
+      const res = await fetch(`./data/${sec.file}?v=${encodeURIComponent(sec.v || '1')}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const cards = (data && data.cards) ? data.cards : {};
+      const byRu = new Map();
+      for (const it of items) {
+        if (it.cat === cat) byRu.set(it.ru.trim().toLowerCase(), it);
+      }
+      const updatedIds = [];
+      for (const [id, entry] of Object.entries(cards)) {
+        if (!entry || !entry.img) continue;
+        let target = items.find(i => i.id === id);
+        if (!target && entry.ru) target = byRu.get(entry.ru.trim().toLowerCase());
+        if (target) {
+          target.img = entry.img;
+          updatedIds.push(target.id);
+        }
+      }
+      loadedStaticSections.add(cat);
+      if (document.getElementById('quizFilter').value === 'browse') {
+        for (const uid of updatedIds) {
+          const it = items.find(i => i.id === uid);
+          const wrap = document.querySelector(`.browse-card[data-item-id="${uid}"] .browse-img-wrap`);
+          if (it && it.img && wrap) {
+            wrap.innerHTML = `<img src="${it.img}" loading="lazy" alt="${it.ru.replace(/"/g, '&quot;')}" onclick="zoomImage('${it.id}', event)">
+              <button class="zoom-btn" onclick="zoomImage('${it.id}', event)">🔍 Лупа</button>`;
+          }
+        }
+      }
+    } catch (e) {
+    } finally {
+      delete staticSectionPromises[cat];
+    }
+  })();
+
+  return staticSectionPromises[cat];
+}
+
+async function loadAllStaticSections() {
+  if (!staticManifest || !staticManifest.sections) return;
+  const cats = Object.keys(staticManifest.sections).filter(c => !loadedStaticSections.has(c));
+  await Promise.all(cats.map(c => ensureStaticSectionLoaded(c)));
+}
+
+async function initDatabase() {
   // Собираем эталонный список структур в точном порядке методички
   const canonicalItems = [];
   let idx = 1;
@@ -1480,6 +1585,10 @@ function initDatabase() {
       canonicalItems.push({ id: 's_' + (idx++), cat, ru: pair[0], lat: pair[1], img: pair[2] || null });
     }
   }
+  const hasEmbeddedPhotos = canonicalItems.some(i => i.img);
+
+  // Разделение доступа строго по ссылке (?db=... или ?edit=1)
+  isVolunteerMode = window.location.search.includes('db=') || window.location.search.includes('edit=1');
 
   // Переносим локально сохраненные фото (если есть) строго по совпадению раздела и русского названия
   const saved = localStorage.getItem('anat_items_v1');
@@ -1519,7 +1628,6 @@ function initDatabase() {
   if (firebaseUrl) {
     const inp = document.getElementById('firebaseUrlInput');
     if (inp) inp.value = firebaseUrl;
-    syncFromFirebase();
   }
 
   setupInteractiveZoom();
@@ -1528,28 +1636,35 @@ function initDatabase() {
   renderEditorList();
   switchTab('quiz');
 
-  // Разделение доступа строго по ссылке (?db=... или ?edit=1)
-  const isVolunteer = window.location.search.includes('db=') || window.location.search.includes('edit=1');
   const tabBtns = document.querySelectorAll('.tab-btn');
   const cloudCards = document.querySelectorAll('#tab-cloud .card');
 
-  if (!isVolunteer) {
+  if (!isVolunteerMode) {
     if (tabBtns[1]) tabBtns[1].style.display = 'none';
     if (tabBtns[2]) tabBtns[2].textContent = 'Скачать сайт';
     if (cloudCards[0]) cloudCards[0].style.display = 'none';
     if (cloudCards[2]) cloudCards[2].style.display = 'none';
     if (cloudCards[1]) cloudCards[1].querySelectorAll('.btn-sec').forEach(b => b.style.display = 'none');
+
+    // Студентам сначала пробуем статическую раздачу по разделам (без нагрузки на Firebase)
+    const staticOk = await initStaticData(hasEmbeddedPhotos);
+    if (!staticOk && firebaseUrl && !(window.location.protocol === 'file:' && hasEmbeddedPhotos)) {
+      syncFromFirebase();
+    }
   } else {
     if (tabBtns[1]) tabBtns[1].style.display = '';
     if (tabBtns[2]) tabBtns[2].textContent = 'Облако и Скачивание HTML';
     if (cloudCards[0]) cloudCards[0].style.display = '';
     if (cloudCards[2]) cloudCards[2].style.display = '';
     if (cloudCards[1]) cloudCards[1].querySelectorAll('.btn-sec').forEach(b => b.style.display = '');
+    if (firebaseUrl) syncFromFirebase();
   }
 }
 
 function saveLocal() {
-  try { localStorage.setItem('anat_items_v1', JSON.stringify(items)); } catch(e) {}
+  if (!staticManifest) {
+    try { localStorage.setItem('anat_items_v1', JSON.stringify(items)); } catch(e) {}
+  }
   updateMistakesOption();
 }
 
@@ -1803,28 +1918,63 @@ function updateBrowseGrid(explicitPool) {
   }
 
   grid.className = 'browse-grid';
-  grid.innerHTML = filtered.map(it => `
-    <div class="browse-card">
-      <div class="browse-img-wrap">
-        ${it.img
-          ? `<img src="${it.img}" loading="lazy" alt="${it.ru}" onclick="zoomImage('${it.id}', event)">
-             <button class="zoom-btn" onclick="zoomImage('${it.id}', event)">🔍 Лупа</button>`
-          : `<div class="browse-no-img">Фото пока не загружено</div>`}
-      </div>
+  grid.innerHTML = filtered.map(it => {
+    let imgHtml;
+    if (it.img) {
+      imgHtml = `<img src="${it.img}" loading="lazy" alt="${it.ru.replace(/"/g, '&quot;')}" onclick="zoomImage('${it.id}', event)">
+        <button class="zoom-btn" onclick="zoomImage('${it.id}', event)">🔍 Лупа</button>`;
+    } else if (staticManifest && staticPhotoIds.has(it.id) && !loadedStaticSections.has(it.cat)) {
+      imgHtml = `<div class="browse-no-img" data-lazy-cat="${it.cat.replace(/"/g, '&quot;')}">Загрузка фото...</div>`;
+    } else {
+      imgHtml = `<div class="browse-no-img">Фото пока не загружено</div>`;
+    }
+    return `
+    <div class="browse-card" data-item-id="${it.id}">
+      <div class="browse-img-wrap">${imgHtml}</div>
       <div class="browse-body">
         <div class="browse-ru">${it.ru}</div>
         <div class="browse-lat">${it.lat}</div>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+
+  if (browseObserver) {
+    browseObserver.disconnect();
+    browseObserver = null;
+  }
+  if (staticManifest) {
+    if (cat !== 'ALL' && !loadedStaticSections.has(cat)) {
+      ensureStaticSectionLoaded(cat);
+    } else {
+      const placeholders = grid.querySelectorAll('[data-lazy-cat]');
+      if (placeholders.length) {
+        if ('IntersectionObserver' in window) {
+          browseObserver = new IntersectionObserver(entries => {
+            for (const entry of entries) {
+              if (entry.isIntersecting) {
+                const c = entry.target.getAttribute('data-lazy-cat');
+                if (c) ensureStaticSectionLoaded(c);
+                browseObserver.unobserve(entry.target);
+              }
+            }
+          }, { rootMargin: '400px 0px' });
+          placeholders.forEach(el => browseObserver.observe(el));
+        } else {
+          const catsToLoad = [...new Set([...placeholders].map(el => el.getAttribute('data-lazy-cat')))];
+          catsToLoad.slice(0, 3).forEach(c => ensureStaticSectionLoaded(c));
+        }
+      }
+    }
+  }
 }
 
-function startNextQuestion() {
+async function startNextQuestion() {
+  const token = ++quizQuestionToken;
   const cat = document.getElementById('quizCategory').value;
   const filter = document.getElementById('quizFilter').value;
   let pool = items.filter(i => cat === 'ALL' || i.cat === cat);
 
-  const withPhotoCount = pool.filter(i => i.img).length;
+  const withPhotoCount = pool.filter(itemHasPhoto).length;
   document.getElementById('statWithPhoto').textContent = `${withPhotoCount} из ${pool.length}`;
 
   if (filter === 'browse') {
@@ -1833,7 +1983,7 @@ function startNextQuestion() {
   }
 
   if (filter === 'with_img' || filter === 'reverse') {
-    pool = pool.filter(i => i.img);
+    pool = pool.filter(itemHasPhoto);
   } else if (filter === 'mistakes') {
     pool = pool.filter(i => mistakes.has(i.id));
   }
@@ -1857,6 +2007,29 @@ function startNextQuestion() {
   }
 
   currentQuizItem = pool[Math.floor(Math.random() * pool.length)];
+
+  // Если включен статический режим и нужный раздел еще не загружен — подгружаем только его
+  if (staticManifest && itemHasPhoto(currentQuizItem) && !loadedStaticSections.has(currentQuizItem.cat)) {
+    box.innerHTML = `<div style="text-align:center;padding:32px;color:var(--muted);font-weight:600">Загрузка фотографий раздела «${currentQuizItem.cat}»...</div>`;
+    await ensureStaticSectionLoaded(currentQuizItem.cat);
+    if (token !== quizQuestionToken) return;
+  }
+  // Если в разделе меньше 3 фото для отвлекающих вариантов, подгрузим еще пару непустых разделов
+  if (staticManifest && filter !== 'reverse' && currentQuizItem.img) {
+    const sameCatLoaded = items.filter(i => i.img && i.cat === currentQuizItem.cat).length;
+    const totalLoaded = items.filter(i => i.img).length;
+    if (sameCatLoaded < 3 && totalLoaded < 3) {
+      const otherCats = Object.entries(staticManifest.sections || {})
+        .filter(([c, s]) => c !== currentQuizItem.cat && s && s.count > 0 && !loadedStaticSections.has(c))
+        .map(([c]) => c)
+        .slice(0, 2);
+      if (otherCats.length) {
+        await Promise.all(otherCats.map(c => ensureStaticSectionLoaded(c)));
+        if (token !== quizQuestionToken) return;
+      }
+    }
+  }
+
   stageShowPassed = !currentQuizItem.img;
   lastAnswerWrong = false;
 
@@ -2283,6 +2456,7 @@ function updateStatsUI() {
 }
 
 // === 6. РЕДАКТОР ДЛЯ ДОБРОВОЛЬЦЕВ (ЛАСТИК, ПРЯМАЯ ЛИНИЯ, ОСТРЫЕ СТРЕЛКИ, ПАМЯТЬ НАСТРОЕК) ===
+const canvasWrap = document.getElementById('canvasWrap');
 const canvas = document.getElementById('edCanvas');
 const ctx = canvas.getContext('2d');
 const annotCanvas = document.createElement('canvas');
@@ -2292,6 +2466,29 @@ let shapes = [];
 let redoStack = [];
 let currentTool = 'blackbox';
 let isDrawing = false, startX = 0, startY = 0, currentPath = [];
+let edScale = 1, edPanX = 0, edPanY = 0;
+let activePointers = new Map();
+let drawPointerId = null;
+let isPinchingEd = false, wasMultiTouch = false;
+let pinchStartDist = 0, pinchStartScale = 1;
+let pinchStartMidX = 0, pinchStartMidY = 0;
+let pinchStartPanX = 0, pinchStartPanY = 0;
+
+function applyEdZoomTransform() {
+  canvas.style.transform = `translate(${edPanX}px, ${edPanY}px) scale(${edScale})`;
+  const btn = document.getElementById('edZoomResetBtn');
+  if (btn) {
+    btn.classList.toggle('hidden', edScale <= 1.01);
+    btn.textContent = `🔍 ${Math.round(edScale * 100)}% (сброс)`;
+  }
+}
+
+function resetEdZoom() {
+  edScale = 1;
+  edPanX = 0;
+  edPanY = 0;
+  applyEdZoomTransform();
+}
 
 function getToolCfg(t) {
   return toolSettings[t] || DEFAULT_TOOL_SETTINGS[t] || { color: '#ef4444', width: 4 };
@@ -2446,6 +2643,7 @@ function applySelectItemForEdit(id) {
   shapes = [];
   redoStack = [];
   updateRedoBtn();
+  resetEdZoom();
   if (it.img) {
     loadImageToCanvas(it.img, false);
   } else {
@@ -2469,6 +2667,7 @@ function loadImageToCanvas(src, markDirty = false) {
     shapes = [];
     redoStack = [];
     updateRedoBtn();
+    resetEdZoom();
     if (markDirty) edBaseChanged = true;
     redrawCanvas();
   };
@@ -2569,9 +2768,37 @@ function getCanvasCoords(e) {
   };
 }
 
-canvas.addEventListener('pointerdown', e => {
+function startEdPinch() {
+  const pts = [...activePointers.values()];
+  if (pts.length < 2) return;
+  isDrawing = false;
+  drawPointerId = null;
+  currentPath = [];
+  isPinchingEd = true;
+  wasMultiTouch = true;
+  pinchStartDist = Math.max(1, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+  pinchStartScale = edScale;
+  pinchStartMidX = (pts[0].x + pts[1].x) / 2;
+  pinchStartMidY = (pts[0].y + pts[1].y) / 2;
+  pinchStartPanX = edPanX;
+  pinchStartPanY = edPanY;
+  redrawCanvas();
+}
+
+canvasWrap.addEventListener('pointerdown', e => {
   if (!baseImage) return;
+  if (e.target && e.target.id === 'edZoomResetBtn') return;
+  if (e.pointerType === 'mouse') activePointers.clear();
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (activePointers.size >= 2) {
+    startEdPinch();
+    return;
+  }
+
+  if (wasMultiTouch || e.target !== canvas) return;
   isDrawing = true;
+  drawPointerId = e.pointerId;
   const pos = getCanvasCoords(e);
   startX = pos.x; startY = pos.y;
   if (currentTool === 'blackpen' || currentTool === 'eraser') {
@@ -2580,8 +2807,40 @@ canvas.addEventListener('pointerdown', e => {
   }
 });
 
-canvas.addEventListener('pointermove', e => {
-  if (!isDrawing || !baseImage) return;
+window.addEventListener('pointermove', e => {
+  if (!baseImage) return;
+  if (activePointers.has(e.pointerId)) {
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  }
+
+  if (isPinchingEd && activePointers.size >= 2) {
+    const pts = [...activePointers.values()];
+    const dist = Math.max(1, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+    const midX = (pts[0].x + pts[1].x) / 2;
+    const midY = (pts[0].y + pts[1].y) / 2;
+    const newScale = Math.min(5, Math.max(1, pinchStartScale * (dist / pinchStartDist)));
+    if (newScale <= 1.01) {
+      edScale = 1;
+      edPanX = 0;
+      edPanY = 0;
+    } else {
+      const wrapRect = canvasWrap.getBoundingClientRect();
+      const originX = wrapRect.left + wrapRect.width / 2;
+      const originY = wrapRect.top + wrapRect.height / 2;
+      const k = newScale / pinchStartScale;
+      const rawPanX = (midX - originX) - k * ((pinchStartMidX - originX) - pinchStartPanX);
+      const rawPanY = (midY - originY) - k * ((pinchStartMidY - originY) - pinchStartPanY);
+      const maxPanX = wrapRect.width * newScale * 0.6;
+      const maxPanY = wrapRect.height * newScale * 0.6;
+      edScale = newScale;
+      edPanX = Math.max(-maxPanX, Math.min(maxPanX, rawPanX));
+      edPanY = Math.max(-maxPanY, Math.min(maxPanY, rawPanY));
+    }
+    applyEdZoomTransform();
+    return;
+  }
+
+  if (!isDrawing || e.pointerId !== drawPointerId) return;
   const pos = getCanvasCoords(e);
   const col = getActiveToolColor();
   const wid = getActiveToolWidth();
@@ -2595,9 +2854,25 @@ canvas.addEventListener('pointermove', e => {
   }
 });
 
-window.addEventListener('pointerup', e => {
-  if (!isDrawing) return;
+function handleEdPointerEnd(e, isCancel) {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size < 2) {
+    isPinchingEd = false;
+  }
+  if (activePointers.size === 0) {
+    wasMultiTouch = false;
+  }
+
+  if (!isDrawing || e.pointerId !== drawPointerId) return;
   isDrawing = false;
+  drawPointerId = null;
+
+  if (isCancel || wasMultiTouch) {
+    currentPath = [];
+    redrawCanvas();
+    return;
+  }
+
   const pos = getCanvasCoords(e);
   const col = getActiveToolColor();
   const wid = getActiveToolWidth();
@@ -2616,7 +2891,11 @@ window.addEventListener('pointerup', e => {
     updateRedoBtn();
   }
   redrawCanvas();
-});
+}
+
+window.addEventListener('pointerup', e => handleEdPointerEnd(e, false));
+window.addEventListener('pointercancel', e => handleEdPointerEnd(e, true));
+canvasWrap.addEventListener('touchmove', e => { if (e.touches.length >= 2) e.preventDefault(); }, { passive: false });
 
 function updateRedoBtn() {
   const btn = document.getElementById('redoBtn');
@@ -2760,6 +3039,7 @@ async function deleteCurrentPhoto() {
   shapes = [];
   redoStack = [];
   updateRedoBtn();
+  resetEdZoom();
   edBaseChanged = false;
   edSavedShapesJson = '[]';
   redrawCanvas();
@@ -2853,8 +3133,79 @@ function copyVolunteerLink() {
   alert('Ссылка для добровольцев скопирована в буфер обмена!');
 }
 
-// === 8. ЧИСТОЕ СКАЧИВАНИЕ ВСЕГО САЙТА В 1 АВТОНОМНЫЙ HTML-ФАЙЛ ===
-function downloadStandaloneHtml() {
+// === 8. ЭКСПОРТ РАЗДЕЛОВ (CLOUDFLARE / GITHUB) И СКАЧИВАНИЕ АВТОНОМНОГО HTML ===
+function hashString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(36);
+}
+
+async function exportStaticSectionsZip() {
+  if (typeof JSZip === 'undefined') {
+    alert('Библиотека JSZip не загрузилась. Проверьте интернет-соединение.');
+    return;
+  }
+  const btn = document.getElementById('exportStaticZipBtn');
+  const origText = btn ? btn.textContent : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Сборка архива разделов...';
+  }
+  try {
+    if (staticManifest) await loadAllStaticSections();
+    const zip = new JSZip();
+    const dataDir = zip.folder('data');
+    const cats = [...new Set(items.map(i => i.cat))];
+    const sections = {};
+    let totalPhotos = 0;
+
+    cats.forEach((cat, idx) => {
+      const file = `sec_${String(idx + 1).padStart(2, '0')}.json`;
+      const cards = {};
+      const ids = [];
+      for (const it of items) {
+        if (it.cat === cat && it.img) {
+          cards[it.id] = { ru: it.ru, img: it.img };
+          ids.push(it.id);
+        }
+      }
+      totalPhotos += ids.length;
+      const jsonStr = JSON.stringify({ cat, cards });
+      dataDir.file(file, jsonStr);
+      sections[cat] = { file, count: ids.length, v: hashString(jsonStr), ids };
+    });
+
+    const manifest = { updatedAt: Date.now(), totalPhotos, sections };
+    dataDir.file('manifest.json', JSON.stringify(manifest));
+
+    const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'data_sections.zip';
+    a.click();
+
+    if (btn) {
+      btn.textContent = `✅ Архив скачан (фото: ${totalPhotos})`;
+      setTimeout(() => { btn.textContent = origText; btn.disabled = false; }, 1800);
+    }
+  } catch (e) {
+    if (btn) { btn.textContent = origText; btn.disabled = false; }
+    alert('Ошибка создания архива разделов.');
+  }
+}
+
+async function downloadStandaloneHtml() {
+  const dlBtn = document.getElementById('downloadHtmlBtn');
+  const origText = dlBtn ? dlBtn.textContent : '';
+  if (staticManifest) {
+    if (dlBtn) { dlBtn.disabled = true; dlBtn.textContent = '⏳ Загрузка всех разделов...'; }
+    await loadAllStaticSections();
+    if (dlBtn) { dlBtn.textContent = origText; dlBtn.disabled = false; }
+  }
+
   const packed = {};
   for (const it of items) {
     if (!packed[it.cat]) packed[it.cat] = [];
@@ -2866,10 +3217,12 @@ function downloadStandaloneHtml() {
     const el = clone.querySelector('#' + id);
     if (el) el.innerHTML = '';
   });
-  ['mistakesDrawer', 'extractedBox', 'zoomModal', 'unsavedModal', 'clearMistakesModal', 'scrollTopBtn'].forEach(id => {
+  ['mistakesDrawer', 'extractedBox', 'zoomModal', 'unsavedModal', 'clearMistakesModal', 'scrollTopBtn', 'edZoomResetBtn'].forEach(id => {
     const el = clone.querySelector('#' + id);
     if (el) el.classList.add('hidden');
   });
+  const expCanvas = clone.querySelector('#edCanvas');
+  if (expCanvas) expCanvas.style.transform = '';
   const expRedoBtn = clone.querySelector('#redoBtn');
   if (expRedoBtn) expRedoBtn.setAttribute('disabled', '');
 
