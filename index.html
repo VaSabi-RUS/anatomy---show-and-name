@@ -1803,66 +1803,112 @@ window.addEventListener('scroll', () => {
   if (btn) btn.classList.toggle('hidden', window.scrollY < 300);
 }, { passive: true });
 
-// === 3. УМНЫЙ ПОДБОР 3 КАРТИНОК ИЗ ОДНОЙ АНАТОМИЧЕСКОЙ ОБЛАСТИ ===
+// === 3. УМНЫЙ ПОДБОР КАРТИНОК И ВАРИАНТОВ ОТВЕТА ИЗ ОДНОЙ АНАТОМИЧЕСКОЙ ОБЛАСТИ ===
+const SMART_STOPWORDS = new Set([
+  'кости','кость','костей','мышца','мышцы','мышц','артерия','артерии','вена','вены',
+  'нерв','нерва','связка','связки','сустав','суставы','часть','части','левая','правая',
+  'левый','правый','левого','правого','верхняя','нижняя','верхний','нижний','передняя',
+  'задняя','передний','задний','медиальный','латеральный','медиальная','латеральная',
+  'большой','малый','большая','малая','средняя','средний','длинный','короткий',
+  'длинная','короткая','musculus','musculi','arteria','arteriae','vena','venae',
+  'nervus','ligamentum','ligamenta','articulatio','ossis','pars','dexter','dextra',
+  'sinister','sinistra','superior','inferior','anterior','posterior','medialis',
+  'lateralis','major','minor','longus','brevis','medius','media'
+]);
+
 function getAnatomicalRegionTag(it) {
   const s = (it.ru + ' ' + it.lat).toLowerCase();
-  const regions = [
-    ['verteb', /позвон|atlant|axis|vertebr|крестц|sacr/],
-    ['thorax_bone', /ребр|cost|грудин|stern/],
-    ['frontal', /лобн|frontal|глабелл|glabell|надглазнич/],
-    ['sphenoid', /клиновидн|sphenoid|седл|sell|гипофизар|крыловидн|pteryg|зрительный канал|кругл|овальн|остист/],
-    ['temporal', /височн|temporal|барабан|tympan|сосцевид|mastoid|сонн|carotic|слухов|acustic/],
-    ['occipital', /затылоч|occipit|подъязычного нерва/],
-    ['maxilla', /верхней челюст|maxill|гаймор|infraorbit/],
-    ['mandible', /нижней челюст|mandibul|подбородоч|mental|венечный отросток нижней/],
-    ['skull_other', /череп|crani|решетчат|ethmoid|слезн|сошник|носов|небн|palatin|хоан|скулов|синус|яремн|рван|hyoid|подъязычной кости/],
-    ['shoulder', /лопатк|scapul|акромион|acromi|ключиц|clavicul/],
-    ['humerus', /плечев|humer/],
-    ['forearm_hand', /лучев|radi|локтев|ulna|olecran|запяст|пястн|кист|фаланг.*кист|carpi|manus/],
-    ['pelvis', /тазов|подвздош|седалищ|лобков|вертлуж|запират|iliac|ischia|pubic|acetabul|obturat/],
-    ['femur', /бедрен|femor|вертел|trochant|надколен|patell/],
-    ['leg_foot', /большеберц|малоберц|лодыжк|tibi|fibul|malleol|таран|пяточ|предплюсн|плюсн|стоп|tali|calcane|tars|pedis/],
-    ['head_neck_musc', /лестнич|scalen|подъязыч|hyoid|грудино-|жевательн|височн.*мышц|крыловидн.*мышц|круговая|скулов.*мышц|щечн|губ|шлем|aponeur|треугольник/],
-    ['trunk_musc', /трапециевид|широчайш|ромбовид|выпрямляющ|грудн.*мышц|зубчат|межребер|диафрагм|diaphragm|живот|abdomin|пахов|inguin/],
-    ['upper_limb_musc', /дельтовид|надостн|подостн|подлопаточ|кругл.*мышц|двуглав.*плеч|клювовидно|сгибатель.*запяст|сгибатель.*пальцев.*кист|сгибатель.*большого пальца|разгибатель.*запяст|разгибатель.*кист|пронатор|супинатор|отводящ.*большой|мизинц|червеобразн|межкостн|локтевая ямка/],
-    ['lower_limb_musc', /пояснич|лакун|ягодич|glute|грушевид|piriform|портняж|четырехглав|приводящ|тонкая|гребенчат|бедр|полусухожил|полуперепонч|голен|икронож|камбаловид|разгибатель.*стоп|сгибатель.*стоп|малоберцов.*мышц|подошвен/],
-    ['mouth_pharynx', /слюнн|зуб|dent|язык|lingua|миндалин|tonsill|неб|palat|глотк|pharyn|пищевод|esophag/],
-    ['stomach', /желуд|gastr|привратник|pylor/],
-    ['intestine', /кишк|duoden|jejun|ile|caec|аппендикс|appendix|ободоч|colon|гаустр|сальников.*лент|прямая/],
-    ['liver_pancreas', /печен|hepat|желчн|biliar|пузырн|cystic|choledoch|поджелудоч|pancrea/],
-    ['peritoneum', /сальник|oment|брыжейк|mesent|mesocol|сумк|bursa|углублен|excavat|синус.*брюшин|канал.*бороз/],
-    ['nose_larynx', /носов|nasi|гортан|laryn|щитовидн.*хрящ|перстневид|черпаловид|надгортан|голосов|thyroid|cricoid|aryten|glott/],
-    ['trachea_lungs', /трахе|trache|бронх|bronch|легк|pulmon|плевр|pleur/],
-    ['heart', /сердц|cord|предсерд|atri|желудоч.*серд|ушко|auricul|клапан|valv|трабекул|сосочков|хорд|перикард|pericard|венечн|coronar|легочный ствол|аорт|aort/],
-    ['head_neck_art', /сонн.*артер|carot|щитовидн.*артер|язычн.*артер|лицев.*артер|затылочн.*артер|височн.*артер|верхнечелюстн|менингеальн|мозгов.*артер|базилярн|позвоночн.*артер|виллизиев|глазн.*артер|подключичн.*артер|грудная артерия|ствол/],
-    ['upper_limb_art', /подмышечн.*артер|плечев.*артер|лучев.*артер|локтев.*артер|ладонн|пальцев.*артер|пястн.*артер|огибающая лопатку/],
-    ['abdom_pelv_art', /чревный|селезеночн.*артер|желудочн.*артер|печеночн.*артер|брыжеечн.*артер|ободочн.*артер|прямокишечн|почечн.*артер|надпочечников.*артер|яичков|подвздошн.*артер|ягодичн.*артер|маточн|пупочн|запирательн.*артер/],
-    ['lower_limb_art', /бедренн.*артер|колен.*артер|подколенн.*артер|большеберцов.*артер|подошвенн.*артер|стоп.*артер/],
-    ['veins', /вен|vena|azygos|saphen|portae|jugular|cava/],
-    ['spinal_brainstem', /спинного мозга|продолговат|мост|pont|пирамид|олив|мозжеч|cerebell|четверт|ромбовидн|парус|древо жизни/],
-    ['midbrain_dienceph', /среднего мозга|mesencephal|холмик|collicul|ножка мозга|красное ядро|черное вещество|таламус|thalam|коленчат|шишковид|эпиталам|зрительный перекрест|сосцевидное тело|серый бугор|третий|ш желудочек|iii желудочек/],
-    ['cortex_white', /полушар|бороз|sulcus|извилин|gyrus|дольк|lobul|островок|insul|клин|cuneus|крючок|мозолист|callos|свод|fornix|бокового желудочка|хвостат|чечевицеобразн|ограда|капсул|обонятельн/],
-    ['cranial_nerves', /пара\)|тройничн|глазной нерв|верхнечелюстной нерв|нижнечелюстной нерв|ушно-височный|язычный нерв|альвеолярный нерв|гортанный нерв|блуждающ/],
-    ['spinal_nerves', /диафрагмальный нерв|мышечно-кожн|срединный|локтевой нерв|лучевой нерв|подмышечный нерв|бедренный нерв|запирательный нерв|седалищный|малоберцовый нерв|большеберцовый нерв|подошвенный нерв|симпатическ|внутренностный|чревн/],
-    ['eye', /глаз|склер|роговиц|ресничн|радужк|зрачок|сетчатк|хрусталик|стекловидн|веко|конъюнктив|слезн/],
-    ['ear', /ушн|завиток|козелок|противозавиток|противокозелок|мочка/]
-  ];
-  for (const [tag, rx] of regions) {
-    if (rx.test(s)) return tag;
+  const cat = it.cat;
+  let regions = null;
+
+  if (cat === 'Остеология' || cat === 'Артрология') {
+    regions = [
+      ['verteb', /позвон|atlant|axis|vertebr|крестц|sacr|остистый отросток|поперечный отросток|суставной отросток|фиброзное кольцо|студенистое ядро|межостист|желтая связка|надостн.*связк/],
+      ['thorax_bone', /ребр|cost|грудин|stern|мечевидн|xiphoid/],
+      ['leg_foot', /большеберц|малоберц|лодыжк|tibi|fibul|malleol|таран|пяточ|предплюсн|плюсн|кубовидн|cuneiform|стоп|tali|calcane|tars|pedis|cuboideum|голен|подошв/],
+      ['mandible', /нижней челюст|mandibul|подбородоч|mental/],
+      ['maxilla', /верхней челюст|maxill|гаймор|infraorbit/],
+      ['frontal', /лобн|frontal|глабелл|glabell|надглазнич/],
+      ['sphenoid', /клиновидн|sphenoid|седл|sell|гипофизар|крыловидн|pteryg|зрительный канал|круглое отверстие|овальное отверстие|остистое отверстие/],
+      ['temporal', /височн|temporal|барабан|tympan|сосцевид|mastoid|сонн.*канал|carotic|слухов|acustic/],
+      ['occipital', /затылоч|occipit|подъязычного нерва/],
+      ['skull_other', /череп|crani|шов|sutura|решетчат|ethmoid|слезн.*кост|сошник|носов.*кост|небн.*кост|palatin|твердое небо|резцовый канал|хоан|скулов|синус|яремн.*отверст|рван|hyoid|подъязычной кости|глазничн.*щель|скат на черепе/],
+      ['shoulder', /лопатк|scapul|акромион|acromi|ключиц|clavicul|плечевого сустава|суставная губа|клювовидно/],
+      ['humerus', /плечев|humer/],
+      ['forearm_hand', /лучев|radi|локтев|ulna|olecran|предплеч|antebrach|запяст|пястн|кист|фаланг.*кист|carpi|manus/],
+      ['pelvis', /тазов|подвздош|седалищ|лобков|вертлуж|запират|тазобедр|iliac|ischia|pubic|acetabul|obturat|крестцово-/],
+      ['femur', /бедрен|femor|вертел|trochant|надколен|patell|колен|мениск|крестообразн/]
+    ];
+  } else if (cat === 'Миология') {
+    regions = [
+      ['head_neck_musc', /лестнич|scalen|подъязыч|hyoid|грудино-ключич|грудино-щит|жевательн|височн.*мышц|крыловидн.*мышц|круговая|скулов.*мышц|щечн|губ|шлем|aponeur|треугольник|лобное брюшко|двубрюшн/],
+      ['trunk_musc', /трапециевид|широчайш|ромбовид|выпрямляющ|лопатку|грудн.*мышц|зубчат|межребер|диафрагм|diaphragm|живот|abdomin|пахов|inguin|пищеводное|аортальное|полой вены/],
+      ['upper_limb_musc', /дельтовид|надостн|подостн|подлопаточ|кругл.*мышц|двуглав.*плеч|клювовидно|подмышечн|трехсторон|четырехсторон|плече-мышеч|локтев|запяст|пальцев.*кист|большого пальца.*кист|большой палец.*кист|пронатор|супинатор|мизинц|червеобразн|межкостн|удерживатель сгибател|удерживатель разгибател/],
+      ['lower_limb_musc', /пояснич|лакун|ягодич|glute|грушевид|piriform|портняж|четырехглав|приводящ|тонкая|гребенчат|бедр|полусухожил|полуперепонч|голен|икронож|камбаловид|стоп|малоберцов|большеберцов|подошвен|широкую фасцию|широкая фасция|подкожная щель/]
+    ];
+  } else if (cat === 'Пищеварительная система') {
+    regions = [
+      ['mouth_pharynx', /слюнн|зуб|резц|клык|dent|язык|lingua|миндалин|tonsill|неб|palat|глотк|pharyn|трубн|слуховой|пищевод|esophag/],
+      ['stomach', /желуд|gastr|привратник|pylor/],
+      ['intestine', /кишк|duoden|jejun|ile|caec|аппендикс|отросток|appendix|ободоч|colon|гаустр|лента|полулунные|прямая/],
+      ['liver_pancreas', /печен|hepat|желчн|biliar|пузырн|cystic|choledoch|поджелудоч|pancrea/],
+      ['peritoneum', /сальник|oment|брыжейк|mesent|mesocol|сумк|bursa|углублен|excavat|синус.*брюшин|латеральный канал/]
+    ];
+  } else if (cat === 'Дыхательная система') {
+    regions = [
+      ['nose_larynx', /носов|nasi|хоан|гортан|laryn|щитовидн|перстневид|черпаловид|надгортан|голосов|thyroid|cricoid|aryten|glott|преддверия/],
+      ['trachea_lungs', /трахе|trache|бронх|bronch|легк|pulmon|плевр|pleur/]
+    ];
+  } else if (cat === 'Ангиология') {
+    regions = [
+      ['heart', /сердц|cord|предсерд|atri|желудоч.*серд|ушко|auricul|клапан|valv|трабекул|сосочков|хорд|перикард|pericard|венечн|coronar|легочный ствол|легочная артерия|луковица аорты|восходящая часть аорты|дуга аорты/],
+      ['veins', /вен|vena|azygos|saphen|portae|jugular|cava/],
+      ['head_neck_art', /плечеголовн|сонн|carot|щитовидн|язычн|лицев|затылочн|височн|ушная|глоточн|верхнечелюстн|альвеолярн|менингеальн|мозгов|базилярн|позвоночн|виллизиев|глазн|подключичн|грудная артерия|щито-шейный|реберно-шейный|поперечная артерия шеи|надлопаточн/],
+      ['upper_limb_art', /подмышечн|латеральная грудная|подлопаточн|грудо-спинн|огибающая лопатку|плечев|лучев|локтев|ладонн|пальцев|пястн|большого пальца/],
+      ['abdom_pelv_art', /грудная аорта|межреберн|брюшная аорта|поясничн|диафрагмальн|чревный|селезеночн|желудочн|печеночн|брыжеечн|тощекишеч|ободочн|сигмовид|прямокишечн|почечн|надпочечников|яичков|подвздошн|ягодичн|маточн|пупочн|запирательн|мочепузырн|надчревн/],
+      ['lower_limb_art', /бедренн|колен|подколенн|большеберцов|подошвенн|стоп/]
+    ];
+  } else if (cat === 'Центральная нервная система') {
+    regions = [
+      ['spinal_meninges', /спинного мозга|серп|намет|синус/],
+      ['brainstem_cereb', /продолговат|мост|pont|пирамид|олив|мозжеч|cerebell|iv желудочек|ромбовидн|парус|древо жизни|зубчатое/],
+      ['midbrain_dienceph', /среднего мозга|mesencephal|холмик|collicul|ножка мозга|красное ядро|черное вещество|водопровод|межножков|заднее продыряв|промежуточн|таламус|thalam|коленчат|шишковид|эпиталам|зрительный перекрест|сосцевидное тело|серый бугор|воронка|iii желудочек|гипоталам|межжелудочков/],
+      ['cortex_sulci_gyri', /полушар|щель большого|ямка большого|бороз|sulcus|sulci|извилин|gyrus|gyri|дольк|lobul|островок|insul|предклинье|клин|cuneus|крючок|обонятельн|переднее продыряв/],
+      ['white_basal', /мозолист|callos|спайка|свод|fornix|перегородка|бокового желудочка|хвостат|чечевицеобразн|ограда|капсул/]
+    ];
+  } else if (cat === 'Периферическая нервная система') {
+    regions = [
+      ['cranial_nerves', /пара\)|тройничн|глазной нерв|верхнечелюстной нерв|нижнечелюстной нерв|ушно-височный|язычный нерв|альвеолярный нерв|гортанный нерв|блуждающ/],
+      ['upper_nerves', /диафрагмальный|мышечно-кожн|срединный|локтевой|лучевой|подмышечный/],
+      ['lower_nerves', /бедр|запирательный|седалищный|малоберцовый|большеберцовый|подошвенный/],
+      ['autonomic', /симпатическ|внутренностный|чревн/]
+    ];
+  } else if (cat === 'Органы чувств') {
+    regions = [
+      ['eye', /глаз|склер|роговиц|ресничн|радужк|зрачок|сетчатк|хрусталик|стекловидн|веко|конъюнктив|слезн/],
+      ['ear', /ушн|завиток|козелок|противозавиток|противокозелок|мочка/]
+    ];
   }
-  return it.cat;
+
+  if (regions) {
+    for (const [tag, rx] of regions) {
+      if (rx.test(s)) return tag;
+    }
+  }
+  return cat;
 }
 
-function pickSmartDistractors(targetItem) {
-  let pool = items.filter(i => i.img && i.id !== targetItem.id && i.cat === targetItem.cat);
-  if (pool.length < 2) {
-    pool = items.filter(i => i.img && i.id !== targetItem.id);
+function pickSmartDistractors(targetItem, count = 2, requireImg = true) {
+  let pool = items.filter(i => (!requireImg || i.img) && i.id !== targetItem.id && i.cat === targetItem.cat);
+  if (pool.length < count) {
+    pool = items.filter(i => (!requireImg || i.img) && i.id !== targetItem.id);
   }
-  if (pool.length <= 2) return pool;
+  if (pool.length <= count) return pool;
 
   const targetIdx = items.indexOf(targetItem);
   const targetTag = getAnatomicalRegionTag(targetItem);
-  const targetWords = targetItem.ru.toLowerCase().replace(/[().,]/g, '').split(/\s+/).filter(w => w.length >= 4);
+  const targetWords = targetItem.ru.toLowerCase().replace(/[().,]/g, '').split(/\s+/).filter(w => w.length >= 4 && !SMART_STOPWORDS.has(w));
+  const targetLatWords = targetItem.lat.toLowerCase().replace(/[().,]/g, '').split(/\s+/).filter(w => w.length >= 4 && !SMART_STOPWORDS.has(w));
 
   const scored = pool.map(cand => {
     const candIdx = items.indexOf(cand);
@@ -1870,17 +1916,21 @@ function pickSmartDistractors(targetItem) {
     let score = 0;
     if (getAnatomicalRegionTag(cand) === targetTag) score += 500;
     const candLower = cand.ru.toLowerCase();
+    const candLatLower = cand.lat.toLowerCase();
     for (const w of targetWords) {
-      if (candLower.includes(w)) score += 200;
+      if (candLower.includes(w)) score += 180;
+    }
+    for (const w of targetLatWords) {
+      if (candLatLower.includes(w)) score += 120;
     }
     score += Math.max(0, 150 - dist * 3);
     return { cand, score: score + Math.random() * 45 };
   });
 
   scored.sort((a, b) => b.score - a.score);
-  const topCandidates = scored.slice(0, Math.min(5, scored.length)).map(x => x.cand);
+  const topCandidates = scored.slice(0, Math.min(count + 3, scored.length)).map(x => x.cand);
   topCandidates.sort(() => Math.random() - 0.5);
-  return topCandidates.slice(0, 2);
+  return topCandidates.slice(0, count);
 }
 
 // === 4. ПРОСМОТР КАРТОЧЕК (АТЛАС) И ТРЕНАЖЕР ===
@@ -2034,7 +2084,7 @@ async function startNextQuestion() {
   lastAnswerWrong = false;
 
   if (!stageShowPassed && filter !== 'reverse') {
-    const distractors = pickSmartDistractors(currentQuizItem);
+    const distractors = pickSmartDistractors(currentQuizItem, 2, true);
     currentChoices = [currentQuizItem, ...distractors].sort(() => Math.random() - 0.5);
   } else {
     currentChoices = [currentQuizItem];
@@ -2324,10 +2374,8 @@ function renderLatinStep() {
       setTimeout(() => { const inp = document.getElementById('latinInput'); if (inp) inp.focus(); }, 50);
     }
   } else if (mode === 'mc') {
-    let pool = items.filter(i => i.id !== currentQuizItem.id && i.cat === currentQuizItem.cat);
-    if (pool.length < 3) pool = items.filter(i => i.id !== currentQuizItem.id);
-    pool.sort(() => Math.random() - 0.5);
-    const opts = [currentQuizItem, ...pool.slice(0, 3)].sort(() => Math.random() - 0.5);
+    const distractors = pickSmartDistractors(currentQuizItem, 3, false);
+    const opts = [currentQuizItem, ...distractors].sort(() => Math.random() - 0.5);
     container.innerHTML = `
       <div class="latin-box">
         <div style="font-weight:700">${isReverse ? 'Выберите верное название (русский + латынь)' : 'Этап 2 («Назови»): выберите верный латинский термин'}</div>
